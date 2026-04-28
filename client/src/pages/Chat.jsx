@@ -6,6 +6,7 @@ import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 
 export default function Chat() {
   const [conversations, setConversations] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -90,8 +91,12 @@ export default function Chat() {
 
   const loadConversations = async () => {
     try {
-      const data = await api.getConversations();
-      setConversations(data);
+      const [convData, usersData] = await Promise.all([
+        api.getConversations(),
+        api.getAllUsers()
+      ]);
+      setConversations(convData);
+      setAllUsers(usersData);
     } catch (err) {
       console.error('Failed to load conversations:', err);
     }
@@ -293,11 +298,35 @@ export default function Chat() {
               </div>
             </div>
           ))}
-          {conversations.length === 0 && !showSearch && (
+          {conversations.length === 0 && !showSearch && allUsers.length > 0 && (
+            <>
+              <div style={{ padding: '8px 16px', fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+                All Users
+              </div>
+              {allUsers.map((u) => (
+                <div
+                  className="user-item"
+                  key={u._id}
+                  onClick={() => openChat(u)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="user-avatar">
+                    {u.avatar ? <img src={u.avatar} alt="" /> : getInitials(u.displayName)}
+                    <span className={`status-dot ${isUserOnline(u._id) ? 'online' : 'offline'}`} />
+                  </div>
+                  <div className="user-info">
+                    <div className="name">{u.displayName}</div>
+                    <div className="status">@{u.username}</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+          {conversations.length === 0 && !showSearch && allUsers.length === 0 && (
             <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
               <Search size={24} style={{ opacity: 0.3, marginBottom: '8px' }} />
-              <p>No conversations yet</p>
-              <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>Search for users to start chatting</p>
+              <p>No users available</p>
+              <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>Ask admin to create accounts</p>
             </div>
           )}
         </div>
@@ -324,9 +353,8 @@ export default function Chat() {
             <div className="chat-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <button
-                  className="btn btn-ghost btn-icon mobile-back-btn"
+                  className="btn btn-ghost btn-icon"
                   onClick={goBackToList}
-                  style={{ display: 'none' }}
                 >
                   <ArrowLeft size={20} />
                 </button>

@@ -462,11 +462,70 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .sidebar { display: none; }
-  .admin-sidebar { width: 60px; min-width: 60px; }
-  .admin-sidebar-header h2, .admin-sidebar-header p, .admin-nav-item span { display: none; }
+  .app-layout { position: relative; }
+
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: 100%; min-width: 100%;
+    z-index: 100; transform: translateX(0);
+    transition: transform 0.3s ease;
+  }
+
+  .sidebar.hidden {
+    transform: translateX(-100%);
+  }
+
+  .main-content.full {
+    width: 100%;
+  }
+
+  .mobile-back-btn { display: flex !important; }
+
+  .chat-header { padding: 12px 16px; }
+  .messages-area { padding: 12px 16px; }
+  .chat-input-area { padding: 12px 16px; }
+  .chat-input-wrapper { gap: 8px; }
+
+  .message-group { max-width: 88%; }
+  .message-avatar { width: 28px; height: 28px; font-size: 0.6rem; }
+  .message-bubble { padding: 8px 12px; font-size: 0.85rem; }
+
+  .sidebar-header { padding: 16px; }
+  .sidebar-header h2 { font-size: 1rem; }
+  .sidebar-footer { padding: 12px 16px; }
+
+  .auth-card { margin: 16px; padding: 28px 24px; }
+  .auth-card h1 { font-size: 1.4rem; }
+
+  .admin-layout { flex-direction: column; }
+  .admin-sidebar {
+    width: 100%; flex-direction: row;
+    border-right: none; border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .admin-sidebar-header { padding: 12px 16px; }
+  .admin-sidebar-header p { display: none; }
+  .admin-nav { flex-direction: row; padding: 8px; gap: 2px; }
+  .admin-nav-item { padding: 8px 12px; font-size: 0.8rem; white-space: nowrap; }
+  .admin-nav-item.active { border-left: none; border-bottom: 2px solid var(--accent); }
   .admin-main { padding: 16px; }
-  .message-group { max-width: 90%; }
+  .admin-page-header h1 { font-size: 1.2rem; }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-card { padding: 14px; }
+  .stat-card .stat-value { font-size: 1.3rem; }
+
+  .setting-row { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .setting-row .setting-control { width: 100%; }
+  .setting-row .input { flex: 1; }
+
+  .modal { padding: 24px; margin: 16px; }
+
+  .data-table th, .data-table td { padding: 8px 10px; font-size: 0.8rem; }
+}
+
+@media (max-width: 400px) {
+  .auth-card { padding: 24px 20px; }
+  .stats-grid { grid-template-columns: 1fr; }
 }
 
 /* Loading */

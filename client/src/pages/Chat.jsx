@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, LogOut, Search, MessageCircle, ArrowLeft, X } from 'lucide-react';
+import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 
@@ -15,14 +15,22 @@ export default function Chat() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const searchTimeoutRef = useRef(null);
+  const activeChatRef = useRef(null);
   const navigate = useNavigate();
+
+  const isMobile = () => window.innerWidth <= 768;
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
+
+  useEffect(() => {
+    activeChatRef.current = activeChat;
+  }, [activeChat]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -37,12 +45,19 @@ export default function Chat() {
     const socket = connectSocket(token);
 
     socket.on('message:new', (msg) => {
-      setMessages((prev) => {
-        const isDuplicate = prev.some(m => m._id === msg._id);
-        if (isDuplicate) return prev;
-        return [...prev, msg];
-      });
-      setTimeout(scrollToBottom, 50);
+      const currentChat = activeChatRef.current;
+      const isInCurrentChat = currentChat && (
+        (msg.sender === currentChat._id && msg.receiver === parsed.id) ||
+        (msg.sender === parsed.id && msg.receiver === currentChat._id)
+      );
+
+      if (isInCurrentChat) {
+        setMessages((prev) => {
+          if (prev.some(m => m._id === msg._id)) return prev;
+          return [...prev, msg];
+        });
+        setTimeout(scrollToBottom, 50);
+      }
 
       setConversations(prev => {
         const otherUserId = msg.sender === parsed.id ? msg.receiver : msg.sender;
@@ -55,6 +70,7 @@ export default function Chat() {
           );
           return updated.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
         }
+        loadConversations();
         return prev;
       });
     });
@@ -88,6 +104,7 @@ export default function Chat() {
     setSearchQuery('');
     setSearchResults([]);
     setTypingUsers([]);
+    if (isMobile()) setShowSidebar(false);
 
     try {
       const data = await api.getConversation(chatUser._id);
@@ -96,6 +113,12 @@ export default function Chat() {
     } catch (err) {
       console.error('Failed to load messages:', err);
     }
+  };
+
+  const goBackToList = () => {
+    setActiveChat(null);
+    setMessages([]);
+    setShowSidebar(true);
   };
 
   const handleSearch = (value) => {
@@ -163,6 +186,17 @@ export default function Chat() {
   };
 
   const formatTime = (date) => {
+    const d = new Date(date);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    if (isToday) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
+  const formatMsgTime = (date) => {
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -178,7 +212,7 @@ export default function Chat() {
 
   return (
     <div className="app-layout">
-      <div className="sidebar">
+      <div className={`sidebar ${!showSidebar ? 'hidden' : ''}`}>
         <div className="sidebar-header">
           <h2><span className="logo-dot" /> ChatRoom</h2>
           <button
@@ -235,10 +269,14 @@ export default function Chat() {
         <div className="user-list">
           {conversations.map((conv) => (
             <div
-              className={`user-item ${activeChat?._id === conv.user._id ? 'active' : ''}`}
+              className="user-item"
               key={conv.user._id}
               onClick={() => openChat(conv.user)}
-              style={{ cursor: 'pointer', background: activeChat?._id === conv.user._id ? 'var(--accent-glow)' : undefined }}
+              style={{
+                cursor: 'pointer',
+                background: activeChat?._id === conv.user._id ? 'var(--accent-glow)' : undefined,
+                borderLeft: activeChat?._id === conv.user._id ? '3px solid var(--accent)' : '3px solid transparent'
+              }}
             >
               <div className="user-avatar">
                 {conv.user.avatar ? <img src={conv.user.avatar} alt="" /> : getInitials(conv.user.displayName)}
@@ -280,17 +318,17 @@ export default function Chat() {
         </div>
       </div>
 
-      <div className="main-content">
+      <div className={`main-content ${!showSidebar ? 'full' : ''}`}>
         {activeChat ? (
           <>
             <div className="chat-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <button
-                  className="btn btn-ghost btn-icon"
-                  onClick={() => { setActiveChat(null); setMessages([]); }}
+                  className="btn btn-ghost btn-icon mobile-back-btn"
+                  onClick={goBackToList}
                   style={{ display: 'none' }}
                 >
-                  <ArrowLeft size={18} />
+                  <ArrowLeft size={20} />
                 </button>
                 <div className="user-avatar" style={{ width: 36, height: 36, fontSize: '0.75rem' }}>
                   {activeChat.avatar ? <img src={activeChat.avatar} alt="" /> : getInitials(activeChat.displayName)}
@@ -322,7 +360,7 @@ export default function Chat() {
                     <div className="message-content">
                       <span className="message-sender">{isOwn ? 'You' : activeChat.displayName}</span>
                       <div className="message-bubble">{msg.content}</div>
-                      <span className="message-time">{formatTime(msg.createdAt)}</span>
+                      <span className="message-time">{formatMsgTime(msg.createdAt)}</span>
                     </div>
                   </div>
                 );
@@ -350,10 +388,10 @@ export default function Chat() {
             </div>
           </>
         ) : (
-          <div className="empty-state">
+          <div className="empty-state" onClick={() => { if (isMobile()) setShowSidebar(true); }}>
             <MessageCircle size={56} />
             <h3>Select a conversation</h3>
-            <p>Choose a chat from the sidebar or search for a user to start messaging</p>
+            <p>Choose a chat from the sidebar or search for a user</p>
           </div>
         )}
       </div>

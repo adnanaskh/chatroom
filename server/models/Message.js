@@ -6,6 +6,11 @@ const messageSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  receiver: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   senderName: {
     type: String,
     required: true
@@ -16,11 +21,6 @@ const messageSchema = new mongoose.Schema({
     trim: true,
     maxlength: [2000, 'Message cannot exceed 2000 characters']
   },
-  type: {
-    type: String,
-    enum: ['text', 'system'],
-    default: 'text'
-  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -29,6 +29,7 @@ const messageSchema = new mongoose.Schema({
   timestamps: false
 });
 
+messageSchema.index({ sender: 1, receiver: 1, createdAt: -1 });
 messageSchema.index({ createdAt: 1 }, { expireAfterSeconds: parseInt(process.env.MESSAGE_TTL) || 86400 });
 
 module.exports = mongoose.model('Message', messageSchema);

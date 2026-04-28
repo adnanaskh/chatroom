@@ -43,6 +43,7 @@ const io = new Server(server, {
 });
 
 const connectedUsers = new Map();
+const userSockets = new Map();
 
 io.use((socket, next) => {
   const token = socket.handshake.auth.token;
@@ -68,32 +69,44 @@ io.on('connection', async (socket) => {
     socketId: socket.id
   });
 
+  userSockets.set(user.userId, socket.id);
+
   if (user.userId) {
     await User.findByIdAndUpdate(user.userId, { isOnline: true, lastSeen: new Date() });
   }
 
-  const onlineUsers = Array.from(connectedUsers.values());
-  io.emit('users:online', onlineUsers);
+  io.emit('users:online', Array.from(connectedUsers.values()));
 
   socket.on('message:send', async (data) => {
     try {
+      if (!data.receiverId) {
+        return socket.emit('message:error', { message: 'Receiver is required.' });
+      }
+
       const message = new Message({
         sender: user.userId,
+        receiver: data.receiverId,
         senderName: data.senderName || user.username,
-        content: data.content,
-        type: 'text'
+        content: data.content
       });
 
       await message.save();
 
-      io.emit('message:new', {
+      const messageData = {
         _id: message._id,
         sender: message.sender,
+        receiver: message.receiver,
         senderName: message.senderName,
         content: message.content,
-        type: message.type,
         createdAt: message.createdAt
-      });
+      };
+
+      socket.emit('message:new', messageData);
+
+      const receiverSocketId = userSockets.get(data.receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit('message:new', messageData);
+      }
     } catch (error) {
       console.error('Message send error:', error);
       socket.emit('message:error', { message: 'Failed to send message.' });
@@ -101,26 +114,34 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('typing:start', (data) => {
-    socket.broadcast.emit('typing:start', {
-      username: data.username || user.username
-    });
+    const receiverSocketId = userSockets.get(data.receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('typing:start', {
+        username: data.username || user.username,
+        userId: user.userId
+      });
+    }
   });
 
   socket.on('typing:stop', (data) => {
-    socket.broadcast.emit('typing:stop', {
-      username: data.username || user.username
-    });
+    const receiverSocketId = userSockets.get(data.receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('typing:stop', {
+        username: data.username || user.username,
+        userId: user.userId
+      });
+    }
   });
 
   socket.on('disconnect', async () => {
     connectedUsers.delete(socket.id);
+    userSockets.delete(user.userId);
 
     if (user.userId) {
       await User.findByIdAndUpdate(user.userId, { isOnline: false, lastSeen: new Date() });
     }
 
-    const onlineUsers = Array.from(connectedUsers.values());
-    io.emit('users:online', onlineUsers);
+    io.emit('users:online', Array.from(connectedUsers.values()));
   });
 });
 

@@ -1,17 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, LogOut, Users, MessageCircle } from 'lucide-react';
+import { Send, LogOut, Search, MessageCircle, ArrowLeft, X } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 
 export default function Chat() {
+  const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
   const [user, setUser] = useState(null);
+  const [activeChat, setActiveChat] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearch, setShowSearch] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
   const navigate = useNavigate();
 
   const scrollToBottom = useCallback(() => {
@@ -26,36 +32,94 @@ export default function Chat() {
     const parsed = JSON.parse(userData);
     setUser(parsed);
 
-    // Load messages
-    api.getMessages().then((data) => {
-      setMessages(data.messages);
-      setTimeout(scrollToBottom, 100);
-    }).catch(console.error);
+    loadConversations();
 
-    // Connect socket
     const socket = connectSocket(token);
 
     socket.on('message:new', (msg) => {
-      setMessages((prev) => [...prev, msg]);
+      setMessages((prev) => {
+        const isDuplicate = prev.some(m => m._id === msg._id);
+        if (isDuplicate) return prev;
+        return [...prev, msg];
+      });
       setTimeout(scrollToBottom, 50);
+
+      setConversations(prev => {
+        const otherUserId = msg.sender === parsed.id ? msg.receiver : msg.sender;
+        const existing = prev.find(c => c.user._id === otherUserId);
+        if (existing) {
+          const updated = prev.map(c =>
+            c.user._id === otherUserId
+              ? { ...c, lastMessage: msg.content, lastMessageAt: msg.createdAt }
+              : c
+          );
+          return updated.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+        }
+        return prev;
+      });
     });
 
     socket.on('users:online', (users) => setOnlineUsers(users));
 
-    socket.on('typing:start', ({ username }) => {
+    socket.on('typing:start', ({ username, userId }) => {
       setTypingUsers((prev) => prev.includes(username) ? prev : [...prev, username]);
     });
 
-    socket.on('typing:stop', ({ username }) => {
+    socket.on('typing:stop', ({ username, userId }) => {
       setTypingUsers((prev) => prev.filter((u) => u !== username));
     });
 
     return () => disconnectSocket();
   }, [navigate, scrollToBottom]);
 
+  const loadConversations = async () => {
+    try {
+      const data = await api.getConversations();
+      setConversations(data);
+    } catch (err) {
+      console.error('Failed to load conversations:', err);
+    }
+  };
+
+  const openChat = async (chatUser) => {
+    setActiveChat(chatUser);
+    setMessages([]);
+    setShowSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setTypingUsers([]);
+
+    try {
+      const data = await api.getConversation(chatUser._id);
+      setMessages(data.messages);
+      setTimeout(scrollToBottom, 100);
+    } catch (err) {
+      console.error('Failed to load messages:', err);
+    }
+  };
+
+  const handleSearch = (value) => {
+    setSearchQuery(value);
+    clearTimeout(searchTimeoutRef.current);
+
+    if (!value.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await api.searchUsers(value);
+        setSearchResults(results);
+      } catch (err) {
+        console.error('Search failed:', err);
+      }
+    }, 300);
+  };
+
   const handleSend = (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !activeChat) return;
 
     const socket = getSocket();
     if (!socket) return;
@@ -63,21 +127,24 @@ export default function Chat() {
     socket.emit('message:send', {
       content: newMessage.trim(),
       senderName: user.displayName,
+      receiverId: activeChat._id,
     });
 
     setNewMessage('');
-    socket.emit('typing:stop', { username: user.displayName });
+    socket.emit('typing:stop', { receiverId: activeChat._id });
   };
 
   const handleTyping = (e) => {
     setNewMessage(e.target.value);
+    if (!activeChat) return;
+
     const socket = getSocket();
     if (!socket) return;
 
-    socket.emit('typing:start', { username: user.displayName });
+    socket.emit('typing:start', { username: user.displayName, receiverId: activeChat._id });
     clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('typing:stop', { username: user.displayName });
+      socket.emit('typing:stop', { username: user.displayName, receiverId: activeChat._id });
     }, 1500);
   };
 
@@ -103,37 +170,96 @@ export default function Chat() {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
   };
 
+  const isUserOnline = (userId) => {
+    return onlineUsers.some(u => u.userId === userId);
+  };
+
   if (!user) return <div className="page-loader"><div className="spinner" /></div>;
 
   return (
     <div className="app-layout">
-      {/* Sidebar */}
       <div className="sidebar">
         <div className="sidebar-header">
           <h2><span className="logo-dot" /> ChatRoom</h2>
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={() => { setShowSearch(!showSearch); setSearchQuery(''); setSearchResults([]); }}
+            title="Search users"
+          >
+            {showSearch ? <X size={18} /> : <Search size={18} />}
+          </button>
         </div>
 
-        <div style={{ padding: '12px 16px', fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
-          <Users size={12} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-          Online — {onlineUsers.length}
+        {showSearch && (
+          <div style={{ padding: '8px 12px' }}>
+            <input
+              className="input"
+              placeholder="Search by username..."
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              autoFocus
+            />
+            {searchResults.length > 0 && (
+              <div className="user-list" style={{ maxHeight: '200px', marginTop: '4px' }}>
+                {searchResults.map((u) => (
+                  <div
+                    className="user-item"
+                    key={u._id}
+                    onClick={() => openChat(u)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="user-avatar">
+                      {u.avatar ? <img src={u.avatar} alt="" /> : getInitials(u.displayName)}
+                      <span className={`status-dot ${isUserOnline(u._id) ? 'online' : 'offline'}`} />
+                    </div>
+                    <div className="user-info">
+                      <div className="name">{u.displayName}</div>
+                      <div className="status">@{u.username}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {searchQuery && searchResults.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                No users found
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ padding: '8px 16px', fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+          Conversations
         </div>
 
         <div className="user-list">
-          {onlineUsers.map((u) => (
-            <div className="user-item" key={u.socketId}>
+          {conversations.map((conv) => (
+            <div
+              className={`user-item ${activeChat?._id === conv.user._id ? 'active' : ''}`}
+              key={conv.user._id}
+              onClick={() => openChat(conv.user)}
+              style={{ cursor: 'pointer', background: activeChat?._id === conv.user._id ? 'var(--accent-glow)' : undefined }}
+            >
               <div className="user-avatar">
-                {getInitials(u.username)}
-                <span className="status-dot online" />
+                {conv.user.avatar ? <img src={conv.user.avatar} alt="" /> : getInitials(conv.user.displayName)}
+                <span className={`status-dot ${isUserOnline(conv.user._id) ? 'online' : 'offline'}`} />
               </div>
-              <div className="user-info">
-                <div className="name">{u.username}</div>
-                <div className="status">Online</div>
+              <div className="user-info" style={{ flex: 1, minWidth: 0 }}>
+                <div className="name">{conv.user.displayName}</div>
+                <div className="status" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {conv.lastMessage}
+                </div>
+              </div>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                {formatTime(conv.lastMessageAt)}
               </div>
             </div>
           ))}
-          {onlineUsers.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              No users online
+          {conversations.length === 0 && !showSearch && (
+            <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              <Search size={24} style={{ opacity: 0.3, marginBottom: '8px' }} />
+              <p>No conversations yet</p>
+              <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>Search for users to start chatting</p>
             </div>
           )}
         </div>
@@ -145,7 +271,7 @@ export default function Chat() {
             </div>
             <div>
               <div className="name">{user.displayName}</div>
-              <div className="role">User</div>
+              <div className="role">@{user.username}</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-icon" onClick={handleLogout} title="Logout">
@@ -154,64 +280,82 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* Main Chat */}
       <div className="main-content">
-        <div className="chat-header">
-          <h3>
-            <MessageCircle size={18} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--accent)' }} />
-            General Chat
-          </h3>
-          <div className="online-count">
-            <span className="dot" /> {onlineUsers.length} online
-          </div>
-        </div>
-
-        <div className="messages-area">
-          {messages.length === 0 && (
-            <div className="empty-state">
-              <MessageCircle size={48} />
-              <h3>No messages yet</h3>
-              <p>Start the conversation!</p>
-            </div>
-          )}
-
-          {messages.map((msg) => {
-            if (msg.type === 'system') {
-              return <div key={msg._id} className="system-message">{msg.content}</div>;
-            }
-            const isOwn = msg.sender === user.id;
-            return (
-              <div key={msg._id} className={`message-group ${isOwn ? 'own' : ''}`}>
-                <div className="message-avatar">{getInitials(msg.senderName)}</div>
-                <div className="message-content">
-                  <span className="message-sender">{msg.senderName}</span>
-                  <div className="message-bubble">{msg.content}</div>
-                  <span className="message-time">{formatTime(msg.createdAt)}</span>
+        {activeChat ? (
+          <>
+            <div className="chat-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button
+                  className="btn btn-ghost btn-icon"
+                  onClick={() => { setActiveChat(null); setMessages([]); }}
+                  style={{ display: 'none' }}
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <div className="user-avatar" style={{ width: 36, height: 36, fontSize: '0.75rem' }}>
+                  {activeChat.avatar ? <img src={activeChat.avatar} alt="" /> : getInitials(activeChat.displayName)}
+                  <span className={`status-dot ${isUserOnline(activeChat._id) ? 'online' : 'offline'}`} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '0.95rem' }}>{activeChat.displayName}</h3>
+                  <div style={{ fontSize: '0.75rem', color: isUserOnline(activeChat._id) ? 'var(--success)' : 'var(--text-muted)' }}>
+                    {isUserOnline(activeChat._id) ? 'Online' : 'Offline'}
+                  </div>
                 </div>
               </div>
-            );
-          })}
-          <div ref={messagesEndRef} />
-        </div>
+            </div>
 
-        <div className="typing-indicator">
-          {typingUsers.length > 0 && (
-            <span>{typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...</span>
-          )}
-        </div>
+            <div className="messages-area">
+              {messages.length === 0 && (
+                <div className="empty-state">
+                  <MessageCircle size={48} />
+                  <h3>Start a conversation</h3>
+                  <p>Send a message to {activeChat.displayName}</p>
+                </div>
+              )}
 
-        <div className="chat-input-area">
-          <form className="chat-input-wrapper" onSubmit={handleSend}>
-            <input
-              className="input" placeholder="Type a message..."
-              value={newMessage} onChange={handleTyping} onKeyDown={handleKeyDown}
-              autoFocus maxLength={2000}
-            />
-            <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
-              <Send size={20} />
-            </button>
-          </form>
-        </div>
+              {messages.map((msg) => {
+                const isOwn = msg.sender === user.id;
+                return (
+                  <div key={msg._id} className={`message-group ${isOwn ? 'own' : ''}`}>
+                    <div className="message-avatar">{getInitials(isOwn ? user.displayName : activeChat.displayName)}</div>
+                    <div className="message-content">
+                      <span className="message-sender">{isOwn ? 'You' : activeChat.displayName}</span>
+                      <div className="message-bubble">{msg.content}</div>
+                      <span className="message-time">{formatTime(msg.createdAt)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="typing-indicator">
+              {typingUsers.length > 0 && (
+                <span>{activeChat.displayName} is typing...</span>
+              )}
+            </div>
+
+            <div className="chat-input-area">
+              <form className="chat-input-wrapper" onSubmit={handleSend}>
+                <input
+                  className="input" placeholder={`Message ${activeChat.displayName}...`}
+                  value={newMessage} onChange={handleTyping} onKeyDown={handleKeyDown}
+                  autoFocus maxLength={2000}
+                />
+                <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
+                  <Send size={20} />
+                </button>
+              </form>
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            <MessageCircle size={56} />
+            <h3>Select a conversation</h3>
+            <p>Choose a chat from the sidebar or search for a user to start messaging</p>
+          </div>
+        )}
       </div>
     </div>
   );

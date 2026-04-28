@@ -2,7 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
-const { adminMiddleware } = require('../middleware/auth');
+const { adminMiddleware, authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -182,6 +182,44 @@ router.patch('/users/:id/password', adminMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ message: 'Server error resetting password.' });
+  }
+});
+
+router.get('/search', authMiddleware, async (req, res) => {
+  try {
+    const query = req.query.q;
+    if (!query || query.length < 1) {
+      return res.json([]);
+    }
+
+    const users = await User.find({
+      _id: { $ne: req.user.userId },
+      $or: [
+        { username: { $regex: query, $options: 'i' } },
+        { displayName: { $regex: query, $options: 'i' } }
+      ]
+    })
+      .select('username displayName avatar isOnline lastSeen')
+      .limit(20)
+      .lean();
+
+    res.json(users);
+  } catch (error) {
+    console.error('Search users error:', error);
+    res.status(500).json({ message: 'Server error searching users.' });
+  }
+});
+
+router.get('/all-users', authMiddleware, async (req, res) => {
+  try {
+    const users = await User.find({ _id: { $ne: req.user.userId } })
+      .select('username displayName avatar isOnline lastSeen')
+      .sort({ displayName: 1 })
+      .lean();
+    res.json(users);
+  } catch (error) {
+    console.error('Get all users error:', error);
+    res.status(500).json({ message: 'Server error fetching users.' });
   }
 });
 

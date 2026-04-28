@@ -61,8 +61,26 @@ const api = {
     });
   },
 
-  getMessages(page = 1, limit = 50) {
-    return this._fetch(`/api/messages?page=${page}&limit=${limit}`, {
+  searchUsers(query) {
+    return this._fetch(`/api/auth/search?q=${encodeURIComponent(query)}`, {
+      headers: this._headers(),
+    });
+  },
+
+  getAllUsers() {
+    return this._fetch('/api/auth/all-users', {
+      headers: this._headers(),
+    });
+  },
+
+  getConversation(userId, page = 1, limit = 50) {
+    return this._fetch(`/api/messages/conversation/${userId}?page=${page}&limit=${limit}`, {
+      headers: this._headers(),
+    });
+  },
+
+  getConversations() {
+    return this._fetch('/api/messages/conversations', {
       headers: this._headers(),
     });
   },

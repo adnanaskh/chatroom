@@ -5,9 +5,6 @@ const { adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ========================
-// Get Current Settings
-// ========================
 router.get('/', adminMiddleware, async (req, res) => {
   try {
     const settings = await Settings.find({});
@@ -16,7 +13,6 @@ router.get('/', adminMiddleware, async (req, res) => {
       settingsMap[s.key] = s.value;
     });
 
-    // Defaults
     if (!settingsMap.messageTTL) {
       settingsMap.messageTTL = parseInt(process.env.MESSAGE_TTL) || 86400;
     }
@@ -28,9 +24,6 @@ router.get('/', adminMiddleware, async (req, res) => {
   }
 });
 
-// ========================
-// Update Message TTL
-// ========================
 router.put('/ttl', adminMiddleware, async (req, res) => {
   try {
     const { ttl } = req.body;
@@ -39,32 +32,27 @@ router.put('/ttl', adminMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'TTL must be at least 60 seconds.' });
     }
 
-    // Update or create setting
     await Settings.findOneAndUpdate(
       { key: 'messageTTL' },
       { key: 'messageTTL', value: ttl },
       { upsert: true, new: true }
     );
 
-    // Recreate TTL index with new value
     try {
       const collection = mongoose.connection.collection('messages');
-      
-      // Drop the old TTL index
+
       const indexes = await collection.indexes();
       const ttlIndex = indexes.find(idx => idx.key && idx.key.createdAt === 1 && idx.expireAfterSeconds !== undefined);
       if (ttlIndex) {
         await collection.dropIndex(ttlIndex.name);
       }
-      
-      // Create new TTL index
+
       await collection.createIndex(
         { createdAt: 1 },
         { expireAfterSeconds: parseInt(ttl) }
       );
     } catch (indexError) {
       console.error('TTL index update error:', indexError);
-      // Non-fatal: the setting is saved, index will be recreated on restart
     }
 
     res.json({ 
@@ -77,9 +65,6 @@ router.put('/ttl', adminMiddleware, async (req, res) => {
   }
 });
 
-// ========================
-// Clear All Messages (Admin)
-// ========================
 router.delete('/messages', adminMiddleware, async (req, res) => {
   try {
     const result = await mongoose.connection.collection('messages').deleteMany({});

@@ -4,9 +4,6 @@ const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ========================
-// Get Recent Messages (paginated)
-// ========================
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -36,9 +33,6 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// ========================
-// Get Message Stats (Admin)
-// ========================
 router.get('/stats', adminMiddleware, async (req, res) => {
   try {
     const total = await Message.countDocuments();

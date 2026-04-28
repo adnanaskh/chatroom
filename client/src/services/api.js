@@ -18,7 +18,6 @@ const api = {
     return data;
   },
 
-  // Auth
   adminLogin(username, password) {
     return this._fetch('/api/auth/admin/login', {
       method: 'POST',
@@ -35,7 +34,6 @@ const api = {
     });
   },
 
-  // Admin - Users
   getUsers() {
     return this._fetch('/api/auth/users', { headers: this._headers(true) });
   },
@@ -63,7 +61,6 @@ const api = {
     });
   },
 
-  // Messages
   getMessages(page = 1, limit = 50) {
     return this._fetch(`/api/messages?page=${page}&limit=${limit}`, {
       headers: this._headers(),
@@ -74,7 +71,6 @@ const api = {
     return this._fetch('/api/messages/stats', { headers: this._headers(true) });
   },
 
-  // Settings
   getSettings() {
     return this._fetch('/api/settings', { headers: this._headers(true) });
   },

@@ -29,9 +29,6 @@ const messageSchema = new mongoose.Schema({
   timestamps: false
 });
 
-// TTL index — messages auto-delete after the configured seconds
-// Default: 86400 seconds = 1 day
-// This will be managed dynamically by the server
 messageSchema.index({ createdAt: 1 }, { expireAfterSeconds: parseInt(process.env.MESSAGE_TTL) || 86400 });
 
 module.exports = mongoose.model('Message', messageSchema);

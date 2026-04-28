@@ -6,9 +6,6 @@ const { adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ========================
-// ADMIN LOGIN (Static Credentials)
-// ========================
 router.post('/admin/login', (req, res) => {
   try {
     const { username, password } = req.body;
@@ -17,7 +14,6 @@ router.post('/admin/login', (req, res) => {
       return res.status(400).json({ message: 'Username and password are required.' });
     }
 
-    // Check against static credentials from env
     if (
       username !== process.env.ADMIN_USERNAME ||
       password !== process.env.ADMIN_PASSWORD
@@ -25,7 +21,6 @@ router.post('/admin/login', (req, res) => {
       return res.status(401).json({ message: 'Invalid admin credentials.' });
     }
 
-    // Generate admin JWT
     const token = jwt.sign(
       { isAdmin: true, username: process.env.ADMIN_USERNAME },
       process.env.JWT_SECRET,
@@ -46,9 +41,6 @@ router.post('/admin/login', (req, res) => {
   }
 });
 
-// ========================
-// USER LOGIN
-// ========================
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -67,7 +59,6 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
-    // Update online status
     user.isOnline = true;
     user.lastSeen = new Date();
     await user.save();
@@ -95,9 +86,6 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ========================
-// ADMIN: Create User
-// ========================
 router.post('/users', adminMiddleware, async (req, res) => {
   try {
     const { username, password, displayName } = req.body;
@@ -106,17 +94,14 @@ router.post('/users', adminMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Username, password, and display name are required.' });
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ username });
     if (existingUser) {
       return res.status(409).json({ message: 'Username already exists.' });
     }
 
-    // Hash password
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Generate avatar from display name
     const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=fff&size=128&bold=true`;
 
     const user = new User({
@@ -148,9 +133,6 @@ router.post('/users', adminMiddleware, async (req, res) => {
   }
 });
 
-// ========================
-// ADMIN: Get All Users
-// ========================
 router.get('/users', adminMiddleware, async (req, res) => {
   try {
     const users = await User.find({})
@@ -163,9 +145,6 @@ router.get('/users', adminMiddleware, async (req, res) => {
   }
 });
 
-// ========================
-// ADMIN: Delete User
-// ========================
 router.delete('/users/:id', adminMiddleware, async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
@@ -179,9 +158,6 @@ router.delete('/users/:id', adminMiddleware, async (req, res) => {
   }
 });
 
-// ========================
-// ADMIN: Reset User Password
-// ========================
 router.patch('/users/:id/password', adminMiddleware, async (req, res) => {
   try {
     const { password } = req.body;

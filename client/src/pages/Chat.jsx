@@ -347,7 +347,7 @@ export default function Chat() {
         </div>
       </div>
 
-      <div className={`main-content ${!showSidebar ? 'full' : ''}`}>
+      <div className={`main-content ${activeChat ? 'active' : ''}`}>
         {activeChat ? (
           <>
             <div className="chat-header">

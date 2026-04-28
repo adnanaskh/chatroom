@@ -465,21 +465,21 @@ body {
   .app-layout { position: relative; }
 
   .sidebar {
-    position: fixed; top: 0; left: 0; bottom: 0;
     width: 100%; min-width: 100%;
-    z-index: 100; transform: translateX(0);
-    transition: transform 0.3s ease;
   }
 
   .sidebar.hidden {
-    transform: translateX(-100%);
+    display: none;
   }
 
-  .main-content.full {
+  .main-content {
+    display: none;
+  }
+
+  .main-content.active {
+    display: flex;
     width: 100%;
   }
-
-  .mobile-back-btn { display: flex !important; }
 
   .chat-header { padding: 12px 16px; }
   .messages-area { padding: 12px 16px; }

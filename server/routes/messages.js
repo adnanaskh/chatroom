@@ -29,7 +29,7 @@ const cleanupMessages = async () => {
   }
 };
 
-setInterval(cleanupMessages, 60 * 60 * 1000);
+setInterval(cleanupMessages, 30 * 1000);
 cleanupMessages();
 
 router.get('/conversation/:userId', authMiddleware, async (req, res) => {

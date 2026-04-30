@@ -126,6 +126,10 @@ export default function Chat() {
   }, [activeChat]);
 
   useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
     if (!token || !userData) { navigate('/'); return; }
@@ -158,8 +162,30 @@ export default function Chat() {
             return [...prev, decryptedMsg];
           });
           setTimeout(scrollToBottom, 50);
+
+          if (!isOwn && document.visibilityState === 'visible') {
+            socket.emit('message:seen', { senderId: msg.sender });
+          }
         };
         decrypt();
+      }
+
+      const isMe = msg.sender === currentUserId;
+      if (!isMe && (!isInCurrentChat || document.visibilityState !== 'visible')) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            navigator.serviceWorker.ready.then(reg => {
+              reg.showNotification(`New message`, {
+                body: 'You have a new encrypted message',
+                icon: '/favicon.svg',
+                tag: 'chat',
+                renotify: true
+              });
+            }).catch(() => {
+              new Notification(`New message`, { body: 'You have a new encrypted message', icon: '/favicon.svg' });
+            });
+          } catch (e) {}
+        }
       }
 
       setConversations(prev => {
@@ -197,6 +223,14 @@ export default function Chat() {
 
     socket.on('typing:stop', ({ username, userId }) => {
       setTypingUsers((prev) => prev.filter((u) => u !== username));
+    });
+
+    socket.on('messages:seen', ({ receiverId }) => {
+      if (activeChatRef.current && activeChatRef.current._id === receiverId) {
+        setMessages((prev) => prev.map(m => 
+          (m.receiver === receiverId && !m.seen) ? { ...m, seen: true, seenAt: new Date() } : m
+        ));
+      }
     });
 
     socket.on('connect', () => {
@@ -290,6 +324,11 @@ export default function Chat() {
       
       setMessages(decryptedMessages);
       if (!silent) setTimeout(scrollToBottom, 100);
+
+      const socket = getSocket();
+      if (socket && data.messages.some(m => m.receiver === currentUserId && !m.seen)) {
+        socket.emit('message:seen', { senderId: chatUser._id });
+      }
     } catch (err) {
       console.error('Failed to load messages:', err);
     }

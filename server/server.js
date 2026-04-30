@@ -148,6 +148,24 @@ io.on('connection', async (socket) => {
     }
   });
 
+  socket.on('message:seen', async (data) => {
+    try {
+      if (!data.senderId) return;
+      
+      await Message.updateMany(
+        { sender: data.senderId, receiver: user.userId, seen: false },
+        { seen: true, seenAt: new Date() }
+      );
+      
+      const senderSocketId = userSockets.get(data.senderId);
+      if (senderSocketId) {
+        io.to(senderSocketId).emit('messages:seen', { receiverId: user.userId });
+      }
+    } catch (err) {
+      console.error('Seen error:', err);
+    }
+  });
+
   socket.on('disconnect', async () => {
     connectedUsers.delete(socket.id);
     userSockets.delete(user.userId);

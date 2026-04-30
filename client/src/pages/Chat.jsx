@@ -53,6 +53,7 @@ export default function Chat() {
         const updatedUser = { ...currentUser, publicKey: newKeys.publicKey };
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
+        loadConversations(updatedUser, newKeys);
       } else {
         const parsedKeys = JSON.parse(storedKeys);
         setKeys(parsedKeys);
@@ -64,11 +65,12 @@ export default function Chat() {
           setUser(updatedUser);
           localStorage.setItem('user', JSON.stringify(updatedUser));
         }
+        loadConversations(currentUser, parsedKeys);
       }
     };
 
     if (user) manageKeys();
-  }, [user?.id]);
+  }, [user?.id, user?._id]);
 
   const isMobile = () => window.innerWidth <= 768;
 
@@ -108,20 +110,19 @@ export default function Chat() {
     const parsed = JSON.parse(userData);
     setUser(parsed);
 
-    loadConversations();
-
     const socket = connectSocket(token);
 
     socket.on('message:new', (msg) => {
       const currentChat = activeChatRef.current;
+      const currentUserId = parsed.id || parsed._id;
       const isInCurrentChat = currentChat && (
-        (msg.sender === currentChat._id && msg.receiver === parsed.id) ||
-        (msg.sender === parsed.id && msg.receiver === currentChat._id)
+        (msg.sender === currentChat._id && msg.receiver === currentUserId) ||
+        (msg.sender === currentUserId && msg.receiver === currentChat._id)
       );
 
-      if (isInCurrentChat) {
+      if (isInCurrentChat && keysRef.current) {
         const decrypt = async () => {
-          const isOwn = msg.sender === parsed.id;
+          const isOwn = msg.sender === currentUserId;
           const keyToDecrypt = isOwn ? msg.senderEncryptedKey : msg.encryptedKey;
           const decryptedContent = await encryption.decryptMessage(
             { ...msg, encryptedKey: keyToDecrypt }, 
@@ -139,12 +140,12 @@ export default function Chat() {
       }
 
       setConversations(prev => {
-        const otherUserId = msg.sender === parsed.id ? msg.receiver : msg.sender;
+        const otherUserId = msg.sender === currentUserId ? msg.receiver : msg.sender;
         const existing = prev.find(c => c.user._id === otherUserId);
         
-        if (existing) {
+        if (existing && keysRef.current) {
           const update = async () => {
-            const isOwn = msg.sender === parsed.id;
+            const isOwn = msg.sender === currentUserId;
             const keyToDecrypt = isOwn ? msg.senderEncryptedKey : msg.encryptedKey;
             const decryptedLastMsg = await encryption.decryptMessage(
               { ...msg, encryptedKey: keyToDecrypt }, 
@@ -178,24 +179,31 @@ export default function Chat() {
     return () => disconnectSocket();
   }, [navigate, scrollToBottom]);
 
-  const loadConversations = async () => {
+  const loadConversations = async (u = user, k = keys) => {
     try {
+      const currentUser = u || JSON.parse(localStorage.getItem('user'));
+      const currentKeys = k || keysRef.current || JSON.parse(localStorage.getItem('chat_keys'));
+      
+      if (!currentUser || !currentKeys) return;
+
       const [convData, usersData] = await Promise.all([
         api.getConversations(),
         api.getAllUsers()
       ]);
       
+      const currentUserId = currentUser.id || currentUser._id;
+
       // Decrypt last messages for conversation list
       const decryptedConvData = await Promise.all(
         convData.map(async (conv) => {
           if (!conv.lastMessage || !conv.lastMessageIv) return conv;
-          const isOwn = conv.lastSender === user.id;
+          const isOwn = conv.lastSender === currentUserId;
           const keyToDecrypt = isOwn ? conv.lastMessageSenderKey : conv.lastMessageKey;
           const decrypted = await encryption.decryptMessage({
             content: conv.lastMessage,
             iv: conv.lastMessageIv,
             encryptedKey: keyToDecrypt
-          }, keysRef.current.privateKey);
+          }, currentKeys.privateKey);
           return { ...conv, lastMessage: decrypted };
         })
       );
@@ -219,10 +227,11 @@ export default function Chat() {
 
     try {
       const data = await api.getConversation(chatUser._id);
+      const currentUserId = user.id || user._id;
       
       const decryptedMessages = await Promise.all(
         data.messages.map(async (msg) => {
-          const isOwn = msg.sender === user.id;
+          const isOwn = msg.sender === currentUserId;
           const keyToDecrypt = isOwn ? msg.senderEncryptedKey : msg.encryptedKey;
           const content = await encryption.decryptMessage(
             { ...msg, encryptedKey: keyToDecrypt }, 
@@ -586,7 +595,8 @@ export default function Chat() {
               )}
 
               {messages.map((msg) => {
-                const isOwn = msg.sender === user.id;
+                const currentUserId = user.id || user._id;
+                const isOwn = msg.sender === currentUserId;
                 return (
                   <div key={msg._id} className={`message-group ${isOwn ? 'own' : ''}`}>
                     <div className="message-avatar">{getInitials(isOwn ? user.displayName : activeChat.displayName)}</div>

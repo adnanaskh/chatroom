@@ -98,7 +98,8 @@ io.on('connection', async (socket) => {
         senderName: data.senderName || user.username,
         content: data.content,
         iv: data.iv,
-        encryptedKey: data.encryptedKey
+        encryptedKey: data.encryptedKey,
+        senderEncryptedKey: data.senderEncryptedKey
       });
 
       await message.save();
@@ -111,6 +112,7 @@ io.on('connection', async (socket) => {
         content: message.content,
         iv: message.iv,
         encryptedKey: message.encryptedKey,
+        senderEncryptedKey: message.senderEncryptedKey,
         createdAt: message.createdAt
       };
 

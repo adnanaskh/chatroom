@@ -98,6 +98,8 @@ router.get('/conversations', authMiddleware, async (req, res) => {
           lastMessage: { $first: '$content' },
           lastIv: { $first: '$iv' },
           lastKey: { $first: '$encryptedKey' },
+          lastSenderKey: { $first: '$senderEncryptedKey' },
+          lastSender: { $first: '$sender' },
           lastMessageAt: { $first: '$createdAt' },
           unreadCount: {
             $sum: {
@@ -126,6 +128,8 @@ router.get('/conversations', authMiddleware, async (req, res) => {
       lastMessage: c.lastMessage,
       lastMessageIv: c.lastIv,
       lastMessageKey: c.lastKey,
+      lastMessageSenderKey: c.lastSenderKey,
+      lastSender: c.lastSender,
       lastMessageAt: c.lastMessageAt,
       unreadCount: c.unreadCount || 0
     })).filter(c => c.user);

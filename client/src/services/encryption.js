@@ -46,8 +46,8 @@ export const encryption = {
     };
   },
 
-  // Encrypt a message for a recipient using their public key
-  async encryptMessage(plainText, recipientPublicKeyBase64) {
+  // Encrypt a message for a recipient and the sender using their respective public keys
+  async encryptMessage(plainText, recipientPublicKeyBase64, senderPublicKeyBase64) {
     // 1. Import recipient's public key
     const publicKeyBuffer = base64ToArrayBuffer(recipientPublicKeyBase64);
     const publicKey = await window.crypto.subtle.importKey(
@@ -82,10 +82,26 @@ export const encryption = {
       exportedAesKey
     );
 
+    // 5. Encrypt the AES key with the sender's RSA Public Key
+    const senderPublicKeyBuffer = base64ToArrayBuffer(senderPublicKeyBase64);
+    const senderPublicKey = await window.crypto.subtle.importKey(
+      "spki",
+      senderPublicKeyBuffer,
+      { name: "RSA-OAEP", hash: "SHA-256" },
+      false,
+      ["encrypt"]
+    );
+    const senderEncryptedAesKey = await window.crypto.subtle.encrypt(
+      { name: "RSA-OAEP" },
+      senderPublicKey,
+      exportedAesKey
+    );
+
     return {
       content: arrayBufferToBase64(encryptedContent),
       iv: arrayBufferToBase64(iv),
       encryptedKey: arrayBufferToBase64(encryptedAesKey),
+      senderEncryptedKey: arrayBufferToBase64(senderEncryptedAesKey)
     };
   },
 

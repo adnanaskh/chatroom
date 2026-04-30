@@ -27,6 +27,10 @@ const messageSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  senderEncryptedKey: {
+    type: String,
+    required: false
+  },
   seen: {
     type: Boolean,
     default: false

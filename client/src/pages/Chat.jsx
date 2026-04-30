@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, User, Settings, Eye, Check, Trash2, Ban } from 'lucide-react';
+import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, User, Settings, Eye, Check, Trash2, Ban, Lock } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 import { encryption } from '../services/encryption';
@@ -121,7 +121,12 @@ export default function Chat() {
 
       if (isInCurrentChat) {
         const decrypt = async () => {
-          const decryptedContent = await encryption.decryptMessage(msg, keysRef.current.privateKey);
+          const isOwn = msg.sender === parsed.id;
+          const keyToDecrypt = isOwn ? msg.senderEncryptedKey : msg.encryptedKey;
+          const decryptedContent = await encryption.decryptMessage(
+            { ...msg, encryptedKey: keyToDecrypt }, 
+            keysRef.current.privateKey
+          );
           const decryptedMsg = { ...msg, content: decryptedContent };
           
           setMessages((prev) => {
@@ -139,7 +144,12 @@ export default function Chat() {
         
         if (existing) {
           const update = async () => {
-            const decryptedLastMsg = await encryption.decryptMessage(msg, keysRef.current.privateKey);
+            const isOwn = msg.sender === parsed.id;
+            const keyToDecrypt = isOwn ? msg.senderEncryptedKey : msg.encryptedKey;
+            const decryptedLastMsg = await encryption.decryptMessage(
+              { ...msg, encryptedKey: keyToDecrypt }, 
+              keysRef.current.privateKey
+            );
             setConversations(current => current.map(c =>
               c.user._id === otherUserId
                 ? { ...c, lastMessage: decryptedLastMsg, lastMessageAt: msg.createdAt }
@@ -179,10 +189,12 @@ export default function Chat() {
       const decryptedConvData = await Promise.all(
         convData.map(async (conv) => {
           if (!conv.lastMessage || !conv.lastMessageIv) return conv;
+          const isOwn = conv.lastSender === user.id;
+          const keyToDecrypt = isOwn ? conv.lastMessageSenderKey : conv.lastMessageKey;
           const decrypted = await encryption.decryptMessage({
             content: conv.lastMessage,
             iv: conv.lastMessageIv,
-            encryptedKey: conv.lastMessageKey
+            encryptedKey: keyToDecrypt
           }, keysRef.current.privateKey);
           return { ...conv, lastMessage: decrypted };
         })
@@ -210,7 +222,12 @@ export default function Chat() {
       
       const decryptedMessages = await Promise.all(
         data.messages.map(async (msg) => {
-          const content = await encryption.decryptMessage(msg, keysRef.current.privateKey);
+          const isOwn = msg.sender === user.id;
+          const keyToDecrypt = isOwn ? msg.senderEncryptedKey : msg.encryptedKey;
+          const content = await encryption.decryptMessage(
+            { ...msg, encryptedKey: keyToDecrypt }, 
+            keysRef.current.privateKey
+          );
           return { ...msg, content };
         })
       );
@@ -301,7 +318,7 @@ export default function Chat() {
           return;
         }
 
-        const encrypted = await encryption.encryptMessage(newMessage.trim(), activeChat.publicKey);
+        const encrypted = await encryption.encryptMessage(newMessage.trim(), activeChat.publicKey, user.publicKey);
         
         socket.emit('message:send', {
           ...encrypted,
@@ -542,6 +559,24 @@ export default function Chat() {
             </div>
 
             <div className="messages-area">
+              <div style={{
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: '8px',
+                padding: '10px 14px',
+                marginBottom: '16px',
+                background: 'rgba(34, 197, 94, 0.05)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.75rem',
+                color: 'var(--success)',
+                border: '1px solid rgba(34, 197, 94, 0.15)',
+                textAlign: 'center'
+              }}>
+                <Lock size={14} />
+                <span>This chat is End-to-End Encrypted (RSA-OAEP & AES-GCM)</span>
+              </div>
+
               {messages.length === 0 && (
                 <div className="empty-state">
                   <MessageCircle size={40} />
@@ -599,6 +634,7 @@ export default function Chat() {
                     onKeyDown={handleKeyDown}
                     autoFocus
                     maxLength={2000}
+                    autoComplete="off"
                   />
                   <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
                     <Send size={18} />

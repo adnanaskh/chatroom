@@ -15,12 +15,22 @@ const settingsRoutes = require('./routes/settings');
 const app = express();
 const server = http.createServer(app);
 
+const clientOrigins = (process.env.CLIENT_URL || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+const adminOrigins = (process.env.ADMIN_URL || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
 const allowedOrigins = [
-  process.env.CLIENT_URL,
+  ...clientOrigins,
+  ...adminOrigins,
   'http://localhost:5173',
   'http://localhost:5174',
-  'http://localhost:3000',
-  'https://admin.adnanahmad.tech'
+  'http://localhost:3000'
 ].filter(Boolean);
 
 app.use(cors({

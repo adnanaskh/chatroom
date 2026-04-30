@@ -19,6 +19,8 @@ export default function Chat() {
   const [showSearch, setShowSearch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [showConversationSettings, setShowConversationSettings] = useState(false);
+  const [requestStatus, setRequestStatus] = useState(null);
+  const [isNewUser, setIsNewUser] = useState(false);
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -100,6 +102,7 @@ export default function Chat() {
       ]);
       setConversations(convData);
       setAllUsers(usersData);
+      setIsNewUser(convData.length === 0);
     } catch (err) {
       console.error('Failed to load conversations:', err);
     }
@@ -108,6 +111,7 @@ export default function Chat() {
   const openChat = async (chatUser) => {
     setActiveChat(chatUser);
     setMessages([]);
+    setRequestStatus(null);
     setShowSearch(false);
     setSearchQuery('');
     setSearchResults([]);
@@ -117,6 +121,7 @@ export default function Chat() {
     try {
       const data = await api.getConversation(chatUser._id);
       setMessages(data.messages);
+      setRequestStatus(data.request);
       setTimeout(scrollToBottom, 100);
     } catch (err) {
       console.error('Failed to load messages:', err);
@@ -126,7 +131,10 @@ export default function Chat() {
   const goBackToList = () => {
     setActiveChat(null);
     setMessages([]);
-    setShowSidebar(true);
+    setRequestStatus(null);
+    if (isMobile()) {
+      setShowSidebar(true);
+    }
   };
 
   const handleSearch = (value) => {
@@ -148,9 +156,34 @@ export default function Chat() {
     }, 300);
   };
 
+  const sendRequest = async () => {
+    if (!activeChat) return;
+    try {
+      const request = await api.sendRequest(activeChat._id);
+      setRequestStatus(request);
+    } catch (err) {
+      console.error('Failed to send request:', err);
+    }
+  };
+
+  const respondToRequest = async (action) => {
+    if (!requestStatus) return;
+    try {
+      const updatedRequest = await api.respondToRequest(requestStatus._id, action);
+      setRequestStatus(updatedRequest);
+      if (action === 'accept') {
+        // Reload messages after accepting
+        const data = await api.getConversation(activeChat._id);
+        setMessages(data.messages);
+      }
+    } catch (err) {
+      console.error('Failed to respond to request:', err);
+    }
+  };
+
   const handleSend = (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !activeChat) return;
+    if (!newMessage.trim() || !activeChat || requestStatus?.status !== 'accepted') return;
 
     const socket = getSocket();
     if (!socket) return;
@@ -309,7 +342,7 @@ export default function Chat() {
               </div>
             </div>
           ))}
-          {conversations.length === 0 && !showSearch && allUsers.length > 0 && (
+          {!isNewUser && conversations.length === 0 && !showSearch && allUsers.length > 0 && (
             <>
               <div style={{ padding: '8px 16px', fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
                 All Users
@@ -333,11 +366,11 @@ export default function Chat() {
               ))}
             </>
           )}
-          {conversations.length === 0 && !showSearch && allUsers.length === 0 && (
+          {conversations.length === 0 && !showSearch && (isNewUser || allUsers.length === 0) && (
             <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
               <Search size={24} style={{ opacity: 0.3, marginBottom: '8px' }} />
-              <p>No users available</p>
-              <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>Ask admin to create accounts</p>
+              <p>No conversations yet</p>
+              <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>Use search to find users and start chatting</p>
             </div>
           )}
         </div>
@@ -405,7 +438,41 @@ export default function Chat() {
             </div>
 
             <div className="messages-area">
-              {messages.length === 0 && (
+              {requestStatus && requestStatus.status !== 'accepted' && (
+                <div className="request-banner">
+                  {requestStatus.status === 'pending' && requestStatus.requesterId === user.id && (
+                    <div className="request-pending">
+                      <MessageCircle size={20} />
+                      <span>Request sent to {activeChat.displayName}. Waiting for response...</span>
+                    </div>
+                  )}
+                  {requestStatus.status === 'pending' && requestStatus.receiverId === user.id && (
+                    <div className="request-incoming">
+                      <MessageCircle size={20} />
+                      <span>{requestStatus.requesterName} wants to chat with you</span>
+                      <div className="request-actions">
+                        <button className="btn btn-success btn-sm" onClick={() => respondToRequest('accept')}>
+                          Accept
+                        </button>
+                        <button className="btn btn-danger btn-sm" onClick={() => respondToRequest('reject')}>
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {requestStatus.status === 'rejected' && (
+                    <div className="request-rejected">
+                      <X size={20} />
+                      <span>Chat request was rejected</span>
+                      <button className="btn btn-primary btn-sm" onClick={sendRequest}>
+                        Send New Request
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {messages.length === 0 && (!requestStatus || requestStatus.status === 'accepted') && (
                 <div className="empty-state">
                   <MessageCircle size={48} />
                   <h3>Start a conversation</h3>
@@ -441,28 +508,47 @@ export default function Chat() {
             </div>
 
             <div className="typing-indicator">
-              {typingUsers.length > 0 && (
+              {typingUsers.length > 0 && requestStatus?.status === 'accepted' && (
                 <span>{activeChat.displayName} is typing...</span>
               )}
             </div>
 
-            <div className="chat-input-area">
-              <form className="chat-input-wrapper" onSubmit={handleSend}>
-                <input
-                  ref={messageInputRef}
-                  className="input"
-                  placeholder={`Message ${activeChat.displayName}...`}
-                  value={newMessage}
-                  onChange={handleTyping}
-                  onKeyDown={handleKeyDown}
-                  autoFocus
-                  maxLength={2000}
-                />
-                <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
-                  <Send size={20} />
-                </button>
-              </form>
-            </div>
+            {(!requestStatus || requestStatus.status === 'accepted') && (
+              <div className="chat-input-area">
+                <form className="chat-input-wrapper" onSubmit={handleSend}>
+                  <input
+                    ref={messageInputRef}
+                    className="input"
+                    placeholder={`Message ${activeChat.displayName}...`}
+                    value={newMessage}
+                    onChange={handleTyping}
+                    onKeyDown={handleKeyDown}
+                    autoFocus
+                    maxLength={2000}
+                  />
+                  <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
+                    <Send size={20} />
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {requestStatus && requestStatus.status !== 'accepted' && requestStatus.requesterId !== user.id && (
+              <div className="chat-input-area">
+                <div className="request-input-placeholder">
+                  {requestStatus.status === 'pending' ? (
+                    <span>Waiting for {activeChat.displayName} to accept your request...</span>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span>Request rejected</span>
+                      <button className="btn btn-primary btn-sm" onClick={sendRequest}>
+                        Send New Request
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="empty-state" onClick={() => { if (isMobile()) setShowSidebar(true); }}>

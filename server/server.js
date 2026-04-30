@@ -101,7 +101,7 @@ io.on('connection', async (socket) => {
         sender: message.sender,
         receiver: message.receiver,
         senderName: message.senderName,
-        content: message.content,
+        content: message.getDecryptedContent(),
         createdAt: message.createdAt
       };
 

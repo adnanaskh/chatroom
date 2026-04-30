@@ -169,6 +169,34 @@ const api = {
       body: JSON.stringify(settings),
     });
   },
+
+  getRequests() {
+    return this._fetch('/api/messages/requests', {
+      headers: this._headers(),
+    });
+  },
+
+  getRequestStatus(userId) {
+    return this._fetch(`/api/messages/requests/${userId}`, {
+      headers: this._headers(),
+    });
+  },
+
+  sendRequest(receiverId) {
+    return this._fetch('/api/messages/requests', {
+      method: 'POST',
+      headers: this._headers(),
+      body: JSON.stringify({ receiverId }),
+    });
+  },
+
+  respondToRequest(requestId, action) {
+    return this._fetch(`/api/messages/requests/${requestId}`, {
+      method: 'PATCH',
+      headers: this._headers(),
+      body: JSON.stringify({ action }),
+    });
+  },
 };
 
 export default api;

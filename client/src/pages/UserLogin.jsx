@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, Shield, MessageCircle, UserPlus } from 'lucide-react';
+import { LogIn, Shield, UserPlus } from 'lucide-react';
 import api from '../services/api';
 
 export default function UserLogin() {
@@ -29,42 +29,33 @@ export default function UserLogin() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          <MessageCircle size={40} style={{ color: '#6366f1' }} />
-        </div>
-        <h1>Welcome Back</h1>
-        <p className="subtitle">Sign in to continue chatting</p>
+        <h1>ChatRoom</h1>
+        <p className="subtitle">Sign in to continue</p>
 
         {error && <div className="auth-error">{error}</div>}
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="input-group">
             <label>Username</label>
-            <input
-              className="input" type="text" placeholder="Enter your username"
-              value={username} onChange={(e) => setUsername(e.target.value)}
-              required autoFocus
-            />
+            <input className="input" type="text" placeholder="Enter your username"
+              value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
           </div>
           <div className="input-group">
             <label>Password</label>
-            <input
-              className="input" type="password" placeholder="Enter your password"
-              value={password} onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            <input className="input" type="password" placeholder="Enter your password"
+              value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? <span className="spinner" /> : <><LogIn size={18} /> Sign In</>}
+            {loading ? <span className="spinner" /> : <><LogIn size={16} /> Sign In</>}
           </button>
         </form>
 
         <div className="auth-links" style={{ justifyContent: 'space-between' }}>
           <a href="/register" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <UserPlus size={14} /> Create Account
+            <UserPlus size={13} /> Create Account
           </a>
           <a href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Shield size={14} /> Admin Panel
+            <Shield size={13} /> Admin
           </a>
         </div>
       </div>

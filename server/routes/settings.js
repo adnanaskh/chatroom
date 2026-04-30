@@ -13,10 +13,6 @@ router.get('/', adminMiddleware, async (req, res) => {
       settingsMap[s.key] = s.value;
     });
 
-    if (!settingsMap.messageTTL) {
-      settingsMap.messageTTL = parseInt(process.env.MESSAGE_TTL) || 86400;
-    }
-
     res.json(settingsMap);
   } catch (error) {
     console.error('Get settings error:', error);
@@ -24,50 +20,9 @@ router.get('/', adminMiddleware, async (req, res) => {
   }
 });
 
-router.put('/ttl', adminMiddleware, async (req, res) => {
-  try {
-    const { ttl } = req.body;
-
-    if (!ttl || ttl < 60) {
-      return res.status(400).json({ message: 'TTL must be at least 60 seconds.' });
-    }
-
-    await Settings.findOneAndUpdate(
-      { key: 'messageTTL' },
-      { key: 'messageTTL', value: ttl },
-      { upsert: true, new: true }
-    );
-
-    try {
-      const collection = mongoose.connection.collection('messages');
-
-      const indexes = await collection.indexes();
-      const ttlIndex = indexes.find(idx => idx.key && idx.key.createdAt === 1 && idx.expireAfterSeconds !== undefined);
-      if (ttlIndex) {
-        await collection.dropIndex(ttlIndex.name);
-      }
-
-      await collection.createIndex(
-        { createdAt: 1 },
-        { expireAfterSeconds: parseInt(ttl) }
-      );
-    } catch (indexError) {
-      console.error('TTL index update error:', indexError);
-    }
-
-    res.json({ 
-      message: `Message TTL updated to ${ttl} seconds (${(ttl / 3600).toFixed(1)} hours)`,
-      ttl 
-    });
-  } catch (error) {
-    console.error('Update TTL error:', error);
-    res.status(500).json({ message: 'Server error updating TTL.' });
-  }
-});
-
 router.delete('/messages', adminMiddleware, async (req, res) => {
   try {
-    const result = await mongoose.connection.collection('messages').deleteMany({});
+    const result = await mongoose.connection.collection('chatmeesage').deleteMany({});
     res.json({ message: `Cleared ${result.deletedCount} messages.` });
   } catch (error) {
     console.error('Clear messages error:', error);

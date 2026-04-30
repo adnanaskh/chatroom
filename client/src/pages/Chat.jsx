@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu, User, Settings, Eye, Check, Trash2, Ban } from 'lucide-react';
+import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, User, Settings, Eye, Check, Trash2, Ban } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
+import { encryption } from '../services/encryption';
 import ConversationSettings from './ConversationSettings';
 
 export default function Chat() {
@@ -20,12 +21,54 @@ export default function Chat() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showConversationSettings, setShowConversationSettings] = useState(false);
   const [isNewUser, setIsNewUser] = useState(false);
+  const [keys, setKeys] = useState(null);
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const activeChatRef = useRef(null);
+  const keysRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    keysRef.current = keys;
+  }, [keys]);
+
+  // Key Management: Generate and upload keys if missing
+  useEffect(() => {
+    const manageKeys = async () => {
+      const storedKeys = localStorage.getItem('chat_keys');
+      const currentUser = JSON.parse(localStorage.getItem('user'));
+      
+      if (!storedKeys) {
+        console.log("Generating new E2EE keys...");
+        const newKeys = await encryption.generateKeyPair();
+        localStorage.setItem('chat_keys', JSON.stringify(newKeys));
+        setKeys(newKeys);
+        
+        // Upload public key to server
+        await api.updateProfile({ publicKey: newKeys.publicKey });
+        
+        // Update local user state
+        const updatedUser = { ...currentUser, publicKey: newKeys.publicKey };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      } else {
+        const parsedKeys = JSON.parse(storedKeys);
+        setKeys(parsedKeys);
+        
+        // Ensure server has the public key
+        if (!currentUser.publicKey) {
+          await api.updateProfile({ publicKey: parsedKeys.publicKey });
+          const updatedUser = { ...currentUser, publicKey: parsedKeys.publicKey };
+          setUser(updatedUser);
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+        }
+      }
+    };
+
+    if (user) manageKeys();
+  }, [user?.id]);
 
   const isMobile = () => window.innerWidth <= 768;
 
@@ -35,6 +78,26 @@ export default function Chat() {
 
   useEffect(() => {
     activeChatRef.current = activeChat;
+  }, [activeChat]);
+
+  // Prevent mobile back button from logging out — push history state
+  useEffect(() => {
+    const handlePopState = (e) => {
+      e.preventDefault();
+      if (activeChat) {
+        goBackToList();
+      }
+      // Push state again to prevent leaving the page
+      window.history.pushState(null, '', window.location.href);
+    };
+
+    // Push initial state so back button triggers popstate instead of navigation
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, [activeChat]);
 
   useEffect(() => {
@@ -57,24 +120,36 @@ export default function Chat() {
       );
 
       if (isInCurrentChat) {
-        setMessages((prev) => {
-          if (prev.some(m => m._id === msg._id)) return prev;
-          return [...prev, msg];
-        });
-        setTimeout(scrollToBottom, 50);
+        const decrypt = async () => {
+          const decryptedContent = await encryption.decryptMessage(msg, keysRef.current.privateKey);
+          const decryptedMsg = { ...msg, content: decryptedContent };
+          
+          setMessages((prev) => {
+            if (prev.some(m => m._id === msg._id)) return prev;
+            return [...prev, decryptedMsg];
+          });
+          setTimeout(scrollToBottom, 50);
+        };
+        decrypt();
       }
 
       setConversations(prev => {
         const otherUserId = msg.sender === parsed.id ? msg.receiver : msg.sender;
         const existing = prev.find(c => c.user._id === otherUserId);
+        
         if (existing) {
-          const updated = prev.map(c =>
-            c.user._id === otherUserId
-              ? { ...c, lastMessage: msg.content, lastMessageAt: msg.createdAt }
-              : c
-          );
-          return updated.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+          const update = async () => {
+            const decryptedLastMsg = await encryption.decryptMessage(msg, keysRef.current.privateKey);
+            setConversations(current => current.map(c =>
+              c.user._id === otherUserId
+                ? { ...c, lastMessage: decryptedLastMsg, lastMessageAt: msg.createdAt }
+                : c
+            ).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt)));
+          };
+          update();
+          return prev;
         }
+        
         loadConversations();
         return prev;
       });
@@ -93,25 +168,27 @@ export default function Chat() {
     return () => disconnectSocket();
   }, [navigate, scrollToBottom]);
 
-  // Prevent backspace from triggering browser back navigation on mobile
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Backspace' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-        e.preventDefault();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   const loadConversations = async () => {
     try {
       const [convData, usersData] = await Promise.all([
         api.getConversations(),
         api.getAllUsers()
       ]);
-      setConversations(convData);
+      
+      // Decrypt last messages for conversation list
+      const decryptedConvData = await Promise.all(
+        convData.map(async (conv) => {
+          if (!conv.lastMessage || !conv.lastMessageIv) return conv;
+          const decrypted = await encryption.decryptMessage({
+            content: conv.lastMessage,
+            iv: conv.lastMessageIv,
+            encryptedKey: conv.lastMessageKey
+          }, keysRef.current.privateKey);
+          return { ...conv, lastMessage: decrypted };
+        })
+      );
+
+      setConversations(decryptedConvData);
       setAllUsers(usersData);
       setIsNewUser(convData.length === 0);
     } catch (err) {
@@ -130,7 +207,15 @@ export default function Chat() {
 
     try {
       const data = await api.getConversation(chatUser._id);
-      setMessages(data.messages);
+      
+      const decryptedMessages = await Promise.all(
+        data.messages.map(async (msg) => {
+          const content = await encryption.decryptMessage(msg, keysRef.current.privateKey);
+          return { ...msg, content };
+        })
+      );
+      
+      setMessages(decryptedMessages);
       setTimeout(scrollToBottom, 100);
     } catch (err) {
       console.error('Failed to load messages:', err);
@@ -157,7 +242,6 @@ export default function Chat() {
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         const results = await api.searchUsers(value);
-        // Filter out blocked users from search if needed (optional, keeping it simple)
         setSearchResults(results);
       } catch (err) {
         console.error('Search failed:', err);
@@ -177,7 +261,7 @@ export default function Chat() {
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
       } else {
-        if (window.confirm(`Are you sure you want to block ${activeChat.displayName}? You will not receive messages from them.`)) {
+        if (window.confirm(`Block ${activeChat.displayName}? You won't receive their messages.`)) {
           const res = await api.blockUser(activeChat._id);
           const updatedUser = { ...user, blockedUsers: res.blockedUsers };
           setUser(updatedUser);
@@ -191,7 +275,7 @@ export default function Chat() {
 
   const handleDeleteConversation = async () => {
     if (!activeChat) return;
-    if (window.confirm(`Are you sure you want to delete the entire conversation with ${activeChat.displayName}?`)) {
+    if (window.confirm(`Delete entire conversation with ${activeChat.displayName}?`)) {
       try {
         await api.deleteConversation(activeChat._id);
         setMessages([]);
@@ -208,17 +292,32 @@ export default function Chat() {
     if (!newMessage.trim() || !activeChat) return;
 
     const socket = getSocket();
-    if (!socket) return;
+    if (!socket || !keys) return;
 
-    socket.emit('message:send', {
-      content: newMessage.trim(),
-      senderName: user.displayName,
-      receiverId: activeChat._id,
-    });
+    const send = async () => {
+      try {
+        if (!activeChat.publicKey) {
+          alert("Recipient has not set up E2EE keys yet. They need to log in first.");
+          return;
+        }
 
-    setNewMessage('');
-    socket.emit('typing:stop', { receiverId: activeChat._id });
-    messageInputRef.current?.focus();
+        const encrypted = await encryption.encryptMessage(newMessage.trim(), activeChat.publicKey);
+        
+        socket.emit('message:send', {
+          ...encrypted,
+          senderName: user.displayName,
+          receiverId: activeChat._id,
+        });
+
+        setNewMessage('');
+        socket.emit('typing:stop', { receiverId: activeChat._id });
+        messageInputRef.current?.focus();
+      } catch (err) {
+        console.error("Encryption/Send failed:", err);
+      }
+    };
+
+    send();
   };
 
   const handleTyping = (e) => {
@@ -289,7 +388,7 @@ export default function Chat() {
         </div>
 
         {showSearch && (
-          <div style={{ padding: '8px 12px' }}>
+          <div style={{ padding: '6px 12px' }}>
             <input
               className="input"
               placeholder="Search by username..."
@@ -298,14 +397,9 @@ export default function Chat() {
               autoFocus
             />
             {searchResults.length > 0 && (
-              <div className="user-list" style={{ maxHeight: '200px', marginTop: '4px' }}>
+              <div className="user-list" style={{ maxHeight: '200px', marginTop: '4px', padding: '0' }}>
                 {searchResults.map((u) => (
-                  <div
-                    className="user-item"
-                    key={u._id}
-                    onClick={() => openChat(u)}
-                    style={{ cursor: 'pointer' }}
-                  >
+                  <div className="user-item" key={u._id} onClick={() => openChat(u)}>
                     <div className="user-avatar">
                       {u.avatar ? <img src={u.avatar} alt="" /> : getInitials(u.displayName)}
                       <span className={`status-dot ${isUserOnline(u._id) ? 'online' : 'offline'}`} />
@@ -326,7 +420,7 @@ export default function Chat() {
           </div>
         )}
 
-        <div style={{ padding: '8px 16px', fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+        <div style={{ padding: '6px 16px', fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: 600 }}>
           Conversations
         </div>
 
@@ -337,9 +431,8 @@ export default function Chat() {
               key={conv.user._id}
               onClick={() => openChat(conv.user)}
               style={{
-                cursor: 'pointer',
-                background: activeChat?._id === conv.user._id ? 'var(--accent-glow)' : undefined,
-                borderLeft: activeChat?._id === conv.user._id ? '3px solid var(--accent)' : '3px solid transparent'
+                background: activeChat?._id === conv.user._id ? 'var(--accent-soft)' : undefined,
+                borderLeft: activeChat?._id === conv.user._id ? '2px solid var(--accent)' : '2px solid transparent'
               }}
             >
               <div className="user-avatar">
@@ -353,7 +446,7 @@ export default function Chat() {
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', flexShrink: 0 }}>
                   {formatTime(conv.lastMessageAt)}
                 </div>
                 {conv.unreadCount > 0 && (
@@ -366,16 +459,11 @@ export default function Chat() {
           ))}
           {!isNewUser && conversations.length === 0 && !showSearch && allUsers.length > 0 && (
             <>
-              <div style={{ padding: '8px 16px', fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+              <div style={{ padding: '6px 16px', fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: 600 }}>
                 All Users
               </div>
               {allUsers.map((u) => (
-                <div
-                  className="user-item"
-                  key={u._id}
-                  onClick={() => openChat(u)}
-                  style={{ cursor: 'pointer' }}
-                >
+                <div className="user-item" key={u._id} onClick={() => openChat(u)}>
                   <div className="user-avatar">
                     {u.avatar ? <img src={u.avatar} alt="" /> : getInitials(u.displayName)}
                     <span className={`status-dot ${isUserOnline(u._id) ? 'online' : 'offline'}`} />
@@ -389,17 +477,17 @@ export default function Chat() {
             </>
           )}
           {conversations.length === 0 && !showSearch && (isNewUser || allUsers.length === 0) && (
-            <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              <Search size={24} style={{ opacity: 0.3, marginBottom: '8px' }} />
+            <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+              <Search size={20} style={{ opacity: 0.2, marginBottom: '8px' }} />
               <p>No conversations yet</p>
-              <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>Use search to find users and start chatting</p>
+              <p style={{ fontSize: '0.7rem', marginTop: '4px' }}>Search to find users</p>
             </div>
           )}
         </div>
 
         <div className="sidebar-footer" style={{ alignItems: 'center' }}>
           <div className="current-user">
-            <div className="user-avatar" style={{ width: 32, height: 32, fontSize: '0.7rem' }}>
+            <div className="user-avatar" style={{ width: 32, height: 32, fontSize: '0.65rem' }}>
               {getInitials(user.displayName)}
             </div>
             <div>
@@ -407,12 +495,12 @@ export default function Chat() {
               <div className="role">@{user.username}</div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '4px' }}>
             <button className="btn btn-ghost btn-icon" onClick={() => navigate('/profile')} title="Profile">
-              <User size={18} />
+              <User size={16} />
             </button>
             <button className="btn btn-ghost btn-icon" onClick={handleLogout} title="Logout">
-              <LogOut size={18} />
+              <LogOut size={16} />
             </button>
           </div>
         </div>
@@ -422,54 +510,33 @@ export default function Chat() {
         {activeChat ? (
           <>
             <div className="chat-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-                {isMobile() && (
-                  <button
-                    className="btn btn-ghost btn-icon"
-                    onClick={() => setShowSidebar(true)}
-                    title="Open conversation list"
-                  >
-                    <Menu size={20} />
-                  </button>
-                )}
-                <button
-                  className="btn btn-ghost btn-icon"
-                  onClick={goBackToList}
-                  title="Back to conversations"
-                >
-                  <ArrowLeft size={20} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+                <button className="btn btn-ghost btn-icon" onClick={goBackToList} title="Back">
+                  <ArrowLeft size={18} />
                 </button>
-                <div className="user-avatar" style={{ width: 36, height: 36, fontSize: '0.75rem' }}>
+                <div className="user-avatar" style={{ width: 34, height: 34, fontSize: '0.7rem' }}>
                   {activeChat.avatar ? <img src={activeChat.avatar} alt="" /> : getInitials(activeChat.displayName)}
                   <span className={`status-dot ${isUserOnline(activeChat._id) ? 'online' : 'offline'}`} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{ fontSize: '0.95rem', margin: 0 }}>{activeChat.displayName}</h3>
-                  <div style={{ fontSize: '0.75rem', color: isUserOnline(activeChat._id) ? 'var(--success)' : 'var(--text-muted)' }}>
+                  <h3 style={{ fontSize: '0.9rem', margin: 0, fontWeight: 600 }}>{activeChat.displayName}</h3>
+                  <div style={{ fontSize: '0.7rem', color: isUserOnline(activeChat._id) ? 'var(--success)' : 'var(--text-muted)' }}>
                     {isUserOnline(activeChat._id) ? 'Online' : 'Offline'}
                   </div>
                 </div>
                 <button
-                  className={`btn btn-ghost btn-icon ${user.blockedUsers?.includes(activeChat._id) ? 'active' : ''}`}
+                  className="btn btn-ghost btn-icon"
                   onClick={handleBlockUser}
-                  title={user.blockedUsers?.includes(activeChat._id) ? "Unblock user" : "Block user"}
+                  title={user.blockedUsers?.includes(activeChat._id) ? "Unblock" : "Block"}
                   style={{ color: user.blockedUsers?.includes(activeChat._id) ? 'var(--danger)' : undefined }}
                 >
-                  <Ban size={18} />
+                  <Ban size={16} />
                 </button>
-                <button
-                  className="btn btn-ghost btn-icon"
-                  onClick={handleDeleteConversation}
-                  title="Delete conversation"
-                >
-                  <Trash2 size={18} />
+                <button className="btn btn-ghost btn-icon" onClick={handleDeleteConversation} title="Delete conversation">
+                  <Trash2 size={16} />
                 </button>
-                <button
-                  className="btn btn-ghost btn-icon"
-                  onClick={() => setShowConversationSettings(true)}
-                  title="Conversation settings"
-                >
-                  <Settings size={18} />
+                <button className="btn btn-ghost btn-icon" onClick={() => setShowConversationSettings(true)} title="Settings">
+                  <Settings size={16} />
                 </button>
               </div>
             </div>
@@ -477,7 +544,7 @@ export default function Chat() {
             <div className="messages-area">
               {messages.length === 0 && (
                 <div className="empty-state">
-                  <MessageCircle size={48} />
+                  <MessageCircle size={40} />
                   <h3>Start a conversation</h3>
                   <p>Send a message to {activeChat.displayName}</p>
                 </div>
@@ -496,9 +563,9 @@ export default function Chat() {
                         {isOwn && (
                           <span className="message-status">
                             {msg.seen ? (
-                              <Eye size={12} color="var(--success)" />
+                              <Eye size={11} color="var(--success)" />
                             ) : (
-                              <Check size={12} color="var(--text-muted)" />
+                              <Check size={11} color="var(--text-muted)" />
                             )}
                           </span>
                         )}
@@ -517,7 +584,7 @@ export default function Chat() {
             </div>
 
             {user.blockedUsers?.includes(activeChat._id) ? (
-              <div className="chat-input-area" style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              <div className="chat-input-area" style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>
                 You have blocked this user. Unblock to send messages.
               </div>
             ) : (
@@ -534,7 +601,7 @@ export default function Chat() {
                     maxLength={2000}
                   />
                   <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
-                    <Send size={20} />
+                    <Send size={18} />
                   </button>
                 </form>
               </div>
@@ -542,7 +609,7 @@ export default function Chat() {
           </>
         ) : (
           <div className="empty-state" onClick={() => { if (isMobile()) setShowSidebar(true); }}>
-            <MessageCircle size={56} />
+            <MessageCircle size={48} />
             <h3>Select a conversation</h3>
             <p>Choose a chat from the sidebar or search for a user</p>
           </div>

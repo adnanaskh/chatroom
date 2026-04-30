@@ -141,14 +141,6 @@ const api = {
     return this._fetch('/api/settings', { headers: this._headers(true) });
   },
 
-  updateTTL(ttl) {
-    return this._fetch('/api/settings/ttl', {
-      method: 'PUT',
-      headers: this._headers(true),
-      body: JSON.stringify({ ttl }),
-    });
-  },
-
   clearMessages() {
     return this._fetch('/api/settings/messages', {
       method: 'DELETE',
@@ -193,6 +185,20 @@ const api = {
 
   getActivityLogs(userId) {
     return this._fetch(`/api/auth/users/${userId}/activity`, {
+      headers: this._headers(true),
+    });
+  },
+
+  // Tracking endpoints for admin dashboard
+  getAllActivityLogs(page = 1, limit = 50, action = '') {
+    const params = `page=${page}&limit=${limit}${action ? `&action=${action}` : ''}`;
+    return this._fetch(`/api/auth/activity/all?${params}`, {
+      headers: this._headers(true),
+    });
+  },
+
+  getTrackingSummary() {
+    return this._fetch('/api/auth/tracking/summary', {
       headers: this._headers(true),
     });
   },

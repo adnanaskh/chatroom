@@ -111,7 +111,8 @@ router.post('/login', async (req, res) => {
         displayName: user.displayName,
         avatar: user.avatar,
         isAdmin: false,
-        blockedUsers: user.blockedUsers || []
+        blockedUsers: user.blockedUsers || [],
+        publicKey: user.publicKey
       }
     });
   } catch (error) {
@@ -192,9 +193,10 @@ router.get('/me', authMiddleware, async (req, res) => {
 
 router.patch('/me', authMiddleware, async (req, res) => {
   try {
-    const { displayName, password } = req.body;
+    const { displayName, password, publicKey } = req.body;
     const updates = {};
     if (displayName) updates.displayName = displayName.trim();
+    if (publicKey) updates.publicKey = publicKey;
     if (password) {
       if (password.length < 6) {
         return res.status(400).json({ message: 'Password must be at least 6 characters.' });
@@ -392,6 +394,66 @@ router.get('/users/:id/activity', adminMiddleware, async (req, res) => {
   }
 });
 
+// Get all activity logs for admin tracking dashboard
+router.get('/activity/all', adminMiddleware, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+    const filter = req.query.action ? { action: req.query.action } : {};
+
+    const [logs, total] = await Promise.all([
+      ActivityLog.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      ActivityLog.countDocuments(filter)
+    ]);
+
+    res.json({
+      logs,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+    });
+  } catch (error) {
+    console.error('Get all activity error:', error);
+    res.status(500).json({ message: 'Server error fetching activity logs.' });
+  }
+});
+
+// Get tracking summary stats for admin dashboard
+router.get('/tracking/summary', adminMiddleware, async (req, res) => {
+  try {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [
+      totalLogs,
+      todayLogins,
+      weekLogins,
+      uniqueIPs,
+      recentSessions
+    ] = await Promise.all([
+      ActivityLog.countDocuments({}),
+      ActivityLog.countDocuments({ action: 'LOGIN', createdAt: { $gte: today } }),
+      ActivityLog.countDocuments({ action: 'LOGIN', createdAt: { $gte: weekAgo } }),
+      ActivityLog.distinct('ipAddress'),
+      ActivityLog.find({ action: 'LOGIN' })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean()
+    ]);
+
+    res.json({
+      totalLogs,
+      todayLogins,
+      weekLogins,
+      uniqueIPCount: uniqueIPs.length,
+      recentSessions
+    });
+  } catch (error) {
+    console.error('Get tracking summary error:', error);
+    res.status(500).json({ message: 'Server error fetching tracking data.' });
+  }
+});
+
 router.delete('/users/:id', adminMiddleware, async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
@@ -446,7 +508,7 @@ router.get('/search', authMiddleware, async (req, res) => {
         { displayName: { $regex: query, $options: 'i' } }
       ]
     })
-      .select('username displayName avatar isOnline lastSeen')
+      .select('username displayName avatar isOnline lastSeen publicKey')
       .limit(20)
       .lean();
 
@@ -460,7 +522,7 @@ router.get('/search', authMiddleware, async (req, res) => {
 router.get('/all-users', authMiddleware, async (req, res) => {
   try {
     const users = await User.find({ _id: { $ne: req.user.userId }, isDeleted: { $ne: true } })
-      .select('username displayName avatar isOnline lastSeen')
+      .select('username displayName avatar isOnline lastSeen publicKey')
       .sort({ displayName: 1 })
       .lean();
     res.json(users);

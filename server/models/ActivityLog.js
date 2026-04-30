@@ -12,7 +12,7 @@ const activityLogSchema = new mongoose.Schema({
   },
   action: {
     type: String,
-    enum: ['LOGIN', 'REGISTER', 'NAME_CHANGE', 'PASSWORD_CHANGE', 'ACCOUNT_DELETED'],
+    enum: ['LOGIN', 'REGISTER', 'NAME_CHANGE', 'PASSWORD_CHANGE', 'ACCOUNT_DELETED', 'SESSION_START', 'SESSION_END'],
     required: true
   },
   ipAddress: {
@@ -30,6 +30,10 @@ const activityLogSchema = new mongoose.Schema({
   details: {
     type: String,
     default: ''
+  },
+  sessionId: {
+    type: String,
+    default: null
   },
   createdAt: {
     type: Date,

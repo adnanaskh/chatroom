@@ -59,7 +59,11 @@ const userSchema = new mongoose.Schema({
   blockedUsers: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  }]
+  }],
+  publicKey: {
+    type: String,
+    default: null
+  }
 }, {
   timestamps: true
 });

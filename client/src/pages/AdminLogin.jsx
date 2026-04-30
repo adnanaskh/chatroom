@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, Shield, MessageCircle } from 'lucide-react';
+import { LogIn, Shield } from 'lucide-react';
 import api from '../services/api';
 
 export default function AdminLogin() {
@@ -30,39 +30,31 @@ export default function AdminLogin() {
     <div className="auth-page">
       <div className="auth-card">
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          <Shield size={40} style={{ color: '#6366f1' }} />
+          <Shield size={32} style={{ color: 'var(--accent)' }} />
         </div>
         <h1>Admin Access</h1>
-        <p className="subtitle">Restricted — authorized personnel only</p>
+        <p className="subtitle">Authorized personnel only</p>
 
         {error && <div className="auth-error">{error}</div>}
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="input-group">
             <label>Admin Username</label>
-            <input
-              className="input" type="text" placeholder="Enter admin username"
-              value={username} onChange={(e) => setUsername(e.target.value)}
-              required autoFocus
-            />
+            <input className="input" type="text" placeholder="Username"
+              value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
           </div>
           <div className="input-group">
             <label>Admin Password</label>
-            <input
-              className="input" type="password" placeholder="Enter admin password"
-              value={password} onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            <input className="input" type="password" placeholder="Password"
+              value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? <span className="spinner" /> : <><LogIn size={18} /> Login as Admin</>}
+            {loading ? <span className="spinner" /> : <><LogIn size={16} /> Login</>}
           </button>
         </form>
 
         <div className="auth-links">
-          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <MessageCircle size={14} /> User Login
-          </a>
+          <a href="/">← User Login</a>
         </div>
       </div>
     </div>

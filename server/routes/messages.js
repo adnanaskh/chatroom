@@ -70,7 +70,7 @@ router.get('/conversation/:userId', authMiddleware, async (req, res) => {
 
     const decryptedMessages = messages.reverse().map((msg) => ({
       ...msg,
-      content: Message.decryptContent(msg.content, msg.iv)
+      // Decryption now happens on the client side
     }));
 
     res.json({
@@ -97,6 +97,7 @@ router.get('/conversations', authMiddleware, async (req, res) => {
           },
           lastMessage: { $first: '$content' },
           lastIv: { $first: '$iv' },
+          lastKey: { $first: '$encryptedKey' },
           lastMessageAt: { $first: '$createdAt' },
           unreadCount: {
             $sum: {
@@ -114,7 +115,7 @@ router.get('/conversations', authMiddleware, async (req, res) => {
 
     const userIds = conversations.map(c => c._id);
     const users = await User.find({ _id: { $in: userIds }, isDeleted: { $ne: true } })
-      .select('username displayName avatar isOnline lastSeen')
+      .select('username displayName avatar isOnline lastSeen publicKey')
       .lean();
 
     const userMap = {};
@@ -122,7 +123,9 @@ router.get('/conversations', authMiddleware, async (req, res) => {
 
     const result = conversations.map(c => ({
       user: userMap[c._id.toString()] || null,
-      lastMessage: c.lastMessage ? Message.decryptContent(c.lastMessage, c.lastIv) : c.lastMessage,
+      lastMessage: c.lastMessage,
+      lastMessageIv: c.lastIv,
+      lastMessageKey: c.lastKey,
       lastMessageAt: c.lastMessageAt,
       unreadCount: c.unreadCount || 0
     })).filter(c => c.user);

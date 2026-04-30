@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu, User, Settings, Eye, Check, Trash2 } from 'lucide-react';
+import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu, User, Settings, Eye, Check, Trash2, Ban } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 import ConversationSettings from './ConversationSettings';
@@ -157,11 +157,36 @@ export default function Chat() {
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         const results = await api.searchUsers(value);
+        // Filter out blocked users from search if needed (optional, keeping it simple)
         setSearchResults(results);
       } catch (err) {
         console.error('Search failed:', err);
       }
     }, 300);
+  };
+
+  const handleBlockUser = async () => {
+    if (!activeChat) return;
+    
+    const isBlocked = user.blockedUsers?.includes(activeChat._id);
+    
+    try {
+      if (isBlocked) {
+        const res = await api.unblockUser(activeChat._id);
+        const updatedUser = { ...user, blockedUsers: res.blockedUsers };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      } else {
+        if (window.confirm(`Are you sure you want to block ${activeChat.displayName}? You will not receive messages from them.`)) {
+          const res = await api.blockUser(activeChat._id);
+          const updatedUser = { ...user, blockedUsers: res.blockedUsers };
+          setUser(updatedUser);
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to block/unblock user:', err);
+    }
   };
 
   const handleDeleteConversation = async () => {
@@ -425,6 +450,14 @@ export default function Chat() {
                   </div>
                 </div>
                 <button
+                  className={`btn btn-ghost btn-icon ${user.blockedUsers?.includes(activeChat._id) ? 'active' : ''}`}
+                  onClick={handleBlockUser}
+                  title={user.blockedUsers?.includes(activeChat._id) ? "Unblock user" : "Block user"}
+                  style={{ color: user.blockedUsers?.includes(activeChat._id) ? 'var(--danger)' : undefined }}
+                >
+                  <Ban size={18} />
+                </button>
+                <button
                   className="btn btn-ghost btn-icon"
                   onClick={handleDeleteConversation}
                   title="Delete conversation"
@@ -478,28 +511,34 @@ export default function Chat() {
             </div>
 
             <div className="typing-indicator">
-              {typingUsers.length > 0 && (
+              {typingUsers.length > 0 && !user.blockedUsers?.includes(activeChat._id) && (
                 <span>{activeChat.displayName} is typing...</span>
               )}
             </div>
 
-            <div className="chat-input-area">
-              <form className="chat-input-wrapper" onSubmit={handleSend}>
-                <input
-                  ref={messageInputRef}
-                  className="input"
-                  placeholder={`Message ${activeChat.displayName}...`}
-                  value={newMessage}
-                  onChange={handleTyping}
-                  onKeyDown={handleKeyDown}
-                  autoFocus
-                  maxLength={2000}
-                />
-                <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
-                  <Send size={20} />
-                </button>
-              </form>
-            </div>
+            {user.blockedUsers?.includes(activeChat._id) ? (
+              <div className="chat-input-area" style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                You have blocked this user. Unblock to send messages.
+              </div>
+            ) : (
+              <div className="chat-input-area">
+                <form className="chat-input-wrapper" onSubmit={handleSend}>
+                  <input
+                    ref={messageInputRef}
+                    className="input"
+                    placeholder={`Message ${activeChat.displayName}...`}
+                    value={newMessage}
+                    onChange={handleTyping}
+                    onKeyDown={handleKeyDown}
+                    autoFocus
+                    maxLength={2000}
+                  />
+                  <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
+                    <Send size={20} />
+                  </button>
+                </form>
+              </div>
+            )}
           </>
         ) : (
           <div className="empty-state" onClick={() => { if (isMobile()) setShowSidebar(true); }}>

@@ -176,6 +176,26 @@ const api = {
       headers: this._headers(),
     });
   },
+
+  blockUser(userId) {
+    return this._fetch(`/api/auth/me/block/${userId}`, {
+      method: 'POST',
+      headers: this._headers(),
+    });
+  },
+
+  unblockUser(userId) {
+    return this._fetch(`/api/auth/me/block/${userId}`, {
+      method: 'DELETE',
+      headers: this._headers(),
+    });
+  },
+
+  getActivityLogs(userId) {
+    return this._fetch(`/api/auth/users/${userId}/activity`, {
+      headers: this._headers(true),
+    });
+  },
 };
 
 export default api;

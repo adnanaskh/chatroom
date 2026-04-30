@@ -7,18 +7,14 @@ const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Cleanup old messages based on conversation settings
 const cleanupMessages = async () => {
   try {
     const now = new Date();
-
-    // Get all conversation settings
     const settings = await ConversationSettings.find({});
 
     for (const setting of settings) {
       const cutoffTime = new Date(now.getTime() - (setting.deleteAfterSeen * 1000));
 
-      // Delete messages that are seen and older than the cutoff
       await Message.deleteMany({
         $or: [
           { sender: setting.userId, receiver: setting.otherUserId },
@@ -28,17 +24,12 @@ const cleanupMessages = async () => {
         seenAt: { $lt: cutoffTime }
       });
     }
-
-    console.log('Message cleanup completed');
   } catch (error) {
     console.error('Message cleanup error:', error);
   }
 };
 
-// Run cleanup every hour
 setInterval(cleanupMessages, 60 * 60 * 1000);
-
-// Run cleanup on startup
 cleanupMessages();
 
 router.get('/conversation/:userId', authMiddleware, async (req, res) => {
@@ -49,13 +40,11 @@ router.get('/conversation/:userId', authMiddleware, async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
 
-    // Check if the other user is deleted
     const otherUser = await User.findById(otherId);
     if (!otherUser || otherUser.isDeleted) {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    // Mark messages as seen when viewing conversation
     await Message.updateMany(
       { sender: otherId, receiver: myId, seen: false },
       { seen: true, seenAt: new Date() }

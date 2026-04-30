@@ -122,9 +122,10 @@ body {
 
 /* ========== AUTH PAGES ========== */
 .auth-page {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  height: 100vh; display: flex; align-items: center; justify-content: center;
   background: var(--gradient-2);
-  position: relative; overflow: hidden;
+  position: relative; overflow-y: auto; overflow-x: hidden;
+  padding: 40px 20px;
 }
 
 .auth-page::before {
@@ -137,13 +138,14 @@ body {
   content: ''; position: absolute; width: 400px; height: 400px;
   background: radial-gradient(circle, rgba(168, 85, 247, 0.06), transparent 70%);
   bottom: -100px; left: -100px; border-radius: 50%;
+  pointer-events: none;
 }
 
 .auth-card {
   width: 100%; max-width: 420px; padding: 40px;
   background: var(--bg-secondary); border: 1px solid var(--border);
   border-radius: var(--radius-xl); position: relative; z-index: 1;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg); margin: auto;
 }
 
 .auth-card h1 {

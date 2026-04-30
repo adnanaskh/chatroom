@@ -87,6 +87,11 @@ io.on('connection', async (socket) => {
         return socket.emit('message:error', { message: 'Receiver is required.' });
       }
 
+      const receiver = await User.findById(data.receiverId).select('blockedUsers');
+      if (receiver && receiver.blockedUsers?.includes(user.userId)) {
+        return socket.emit('message:error', { message: 'You have been blocked by this user.' });
+      }
+
       const message = new Message({
         sender: user.userId,
         receiver: data.receiverId,

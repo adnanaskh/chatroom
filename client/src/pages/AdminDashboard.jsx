@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, MessageSquare, Settings, LogOut, UserPlus, Trash2, KeyRound,
-  Clock, AlertTriangle, BarChart3, RefreshCw, ShieldOff, ShieldCheck, Search
+  Clock, AlertTriangle, BarChart3, RefreshCw, ShieldOff, ShieldCheck, Search, Activity
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -14,6 +14,8 @@ export default function AdminDashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [showActivityModal, setShowActivityModal] = useState(null);
+  const [activityLogs, setActivityLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '' });
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +93,16 @@ export default function AdminDashboard() {
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleViewActivity = async (user) => {
+    try {
+      setShowActivityModal(user);
+      const logs = await api.getActivityLogs(user._id);
+      setActivityLogs(logs);
+    } catch (err) {
+      setError('Failed to fetch activity logs: ' + err.message);
     }
   };
 
@@ -233,6 +245,9 @@ export default function AdminDashboard() {
                           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                             <button className="btn btn-ghost btn-sm" title="Reset Password" onClick={() => { setShowResetModal(u); setNewPassword(''); setError(''); }}>
                               <KeyRound size={14} />
+                            </button>
+                            <button className="btn btn-ghost btn-sm" title="View Activity" onClick={() => handleViewActivity(u)}>
+                              <Activity size={14} />
                             </button>
                             <button className="btn btn-ghost btn-sm" style={{ color: u.isBanned ? 'var(--success)' : 'var(--warning)' }} title={u.isBanned ? 'Unban User' : 'Ban User'} onClick={() => handleBanToggle(u)}>
                               {u.isBanned ? <ShieldCheck size={14} /> : <ShieldOff size={14} />}
@@ -387,6 +402,40 @@ export default function AdminDashboard() {
                 <button className="btn btn-danger" onClick={() => handleDeleteUser(showDeleteConfirm._id)}>
                   <Trash2 size={16} /> Delete
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ACTIVITY LOGS MODAL */}
+        {showActivityModal && (
+          <div className="modal-overlay" onClick={() => setShowActivityModal(null)}>
+            <div className="modal" style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2>Activity Logs: {showActivityModal.displayName}</h2>
+                <button className="btn btn-ghost btn-icon" onClick={() => setShowActivityModal(null)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead><tr><th>Date</th><th>Action</th><th>IP Address</th><th>Browser</th><th>Country</th><th>Details</th></tr></thead>
+                  <tbody>
+                    {activityLogs.map((log) => (
+                      <tr key={log._id}>
+                        <td style={{ fontSize: '0.8rem' }}>{new Date(log.createdAt).toLocaleString()}</td>
+                        <td><span className="badge badge-muted">{log.action}</span></td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{log.ipAddress}</td>
+                        <td style={{ fontSize: '0.75rem', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.browser}>{log.browser}</td>
+                        <td style={{ fontSize: '0.8rem' }}>{log.country}</td>
+                        <td style={{ fontSize: '0.8rem' }}>{log.details || '-'}</td>
+                      </tr>
+                    ))}
+                    {activityLogs.length === 0 && (
+                      <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>No activity logs found</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

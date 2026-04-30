@@ -4,9 +4,30 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Message = require('../models/Message');
 const ConversationSettings = require('../models/ConversationSettings');
+const ActivityLog = require('../models/ActivityLog');
 const { adminMiddleware, authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
+
+const logActivity = async (req, userId, username, action, details = '') => {
+  try {
+    const ipAddress = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || 'Unknown';
+    const browser = req.headers['user-agent'] || 'Unknown';
+    const country = req.headers['cf-ipcountry'] || req.headers['x-vercel-ip-country'] || 'Unknown';
+    
+    await ActivityLog.create({
+      userId,
+      username,
+      action,
+      ipAddress,
+      browser,
+      country,
+      details
+    });
+  } catch (err) {
+    console.error('Failed to log activity', err);
+  }
+};
 
 router.post('/admin/login', (req, res) => {
   try {
@@ -73,6 +94,8 @@ router.post('/login', async (req, res) => {
     user.lastSeen = new Date();
     await user.save();
 
+    await logActivity(req, user._id, user.username, 'LOGIN');
+
     const token = jwt.sign(
       { userId: user._id, username: user.username, isAdmin: false },
       process.env.JWT_SECRET,
@@ -87,7 +110,8 @@ router.post('/login', async (req, res) => {
         username: user.username,
         displayName: user.displayName,
         avatar: user.avatar,
-        isAdmin: false
+        isAdmin: false,
+        blockedUsers: user.blockedUsers || []
       }
     });
   } catch (error) {
@@ -124,6 +148,8 @@ router.post('/register', async (req, res) => {
 
     await user.save();
 
+    await logActivity(req, user._id, user.username, 'REGISTER');
+
     const token = jwt.sign(
       { userId: user._id, username: user.username, isAdmin: false },
       process.env.JWT_SECRET,
@@ -138,7 +164,8 @@ router.post('/register', async (req, res) => {
         username: user.username,
         displayName: user.displayName,
         avatar: user.avatar,
-        isAdmin: false
+        isAdmin: false,
+        blockedUsers: []
       }
     });
   } catch (error) {
@@ -180,6 +207,14 @@ router.patch('/me', authMiddleware, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
+
+    if (updates.displayName) {
+      await logActivity(req, user._id, user.username, 'NAME_CHANGE', `Changed display name to ${updates.displayName}`);
+    }
+    if (updates.password) {
+      await logActivity(req, user._id, user.username, 'PASSWORD_CHANGE');
+    }
+
     res.json({ message: 'Profile updated successfully.', user });
   } catch (error) {
     console.error('Update profile error:', error);
@@ -200,6 +235,8 @@ router.delete('/me', authMiddleware, async (req, res) => {
     await ConversationSettings.deleteMany({
       $or: [{ userId: userId }, { otherUserId: userId }]
     });
+
+    await logActivity(req, userId, req.user.username, 'ACCOUNT_DELETED');
 
     // Soft delete the user account
     const user = await User.findByIdAndUpdate(
@@ -222,6 +259,48 @@ router.delete('/me', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Delete account error:', error);
     res.status(500).json({ message: 'Server error deleting account.' });
+  }
+});
+
+router.post('/me/block/:userId', authMiddleware, async (req, res) => {
+  try {
+    const myId = req.user.userId;
+    const userIdToBlock = req.params.userId;
+
+    if (myId === userIdToBlock) {
+      return res.status(400).json({ message: 'You cannot block yourself.' });
+    }
+
+    const user = await User.findById(myId);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    if (!user.blockedUsers.includes(userIdToBlock)) {
+      user.blockedUsers.push(userIdToBlock);
+      await user.save();
+    }
+
+    res.json({ message: 'User blocked successfully', blockedUsers: user.blockedUsers });
+  } catch (error) {
+    console.error('Block user error:', error);
+    res.status(500).json({ message: 'Server error blocking user.' });
+  }
+});
+
+router.delete('/me/block/:userId', authMiddleware, async (req, res) => {
+  try {
+    const myId = req.user.userId;
+    const userIdToUnblock = req.params.userId;
+
+    const user = await User.findById(myId);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    user.blockedUsers = user.blockedUsers.filter(id => id.toString() !== userIdToUnblock);
+    await user.save();
+
+    res.json({ message: 'User unblocked successfully', blockedUsers: user.blockedUsers });
+  } catch (error) {
+    console.error('Unblock user error:', error);
+    res.status(500).json({ message: 'Server error unblocking user.' });
   }
 });
 
@@ -300,6 +379,16 @@ router.get('/users', adminMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ message: 'Server error fetching users.' });
+  }
+});
+
+router.get('/users/:id/activity', adminMiddleware, async (req, res) => {
+  try {
+    const logs = await ActivityLog.find({ userId: req.params.id }).sort({ createdAt: -1 });
+    res.json(logs);
+  } catch (error) {
+    console.error('Get activity error:', error);
+    res.status(500).json({ message: 'Server error fetching activity logs.' });
   }
 });
 

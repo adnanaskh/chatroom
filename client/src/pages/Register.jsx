@@ -7,12 +7,17 @@ export default function Register() {
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!acceptedTerms) {
+      setError('You must accept the terms and conditions.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -74,12 +79,24 @@ export default function Register() {
               minLength={6}
             />
           </div>
-          <button className="btn btn-primary" type="submit" disabled={loading}>
+          <div className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
+            <input 
+              type="checkbox" 
+              id="terms" 
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            <label htmlFor="terms" style={{ cursor: 'pointer' }}>
+              I accept the <a href="/terms" target="_blank" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Terms and Conditions</a>
+            </label>
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={loading || !acceptedTerms}>
             {loading ? <span className="spinner" /> : <><UserPlus size={18} /> Register</>}
           </button>
         </form>
 
-        <div className="auth-links" style={{ justifyContent: 'space-between' }}>
+        <div className="auth-links" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <button
             type="button"
             className="btn btn-ghost"
@@ -88,9 +105,14 @@ export default function Register() {
           >
             <ArrowLeft size={14} /> Back to Sign In
           </button>
-          <a href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            Admin Panel
-          </a>
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <a href="/about" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              About
+            </a>
+            <a href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              Admin
+            </a>
+          </div>
         </div>
       </div>
     </div>

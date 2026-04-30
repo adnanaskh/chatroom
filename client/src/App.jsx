@@ -5,6 +5,8 @@ import Profile from './pages/Profile';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import Chat from './pages/Chat';
+import Terms from './pages/Terms';
+import About from './pages/About';
 import './index.css';
 
 function App() {
@@ -17,6 +19,8 @@ function App() {
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/about" element={<About />} />
       </Routes>
     </Router>
   );

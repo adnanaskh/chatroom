@@ -226,6 +226,7 @@ export default function AdminDashboard() {
                         <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                           <span className={`badge ${u.isOnline ? 'badge-success' : 'badge-muted'}`}>{u.isOnline ? 'Online' : 'Offline'}</span>
                           {u.isBanned && <span className="badge badge-danger">Banned</span>}
+                          {u.isDeleted && <span className="badge" style={{ background: 'rgba(107,114,128,0.2)', color: 'var(--text-muted)' }}>Deleted</span>}
                         </td>
                         <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{new Date(u.createdAt).toLocaleDateString()}</td>
                         <td>

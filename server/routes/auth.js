@@ -2,6 +2,8 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const Message = require('../models/Message');
+const ConversationSettings = require('../models/ConversationSettings');
 const { adminMiddleware, authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
@@ -56,6 +58,10 @@ router.post('/login', async (req, res) => {
 
     if (user.isBanned) {
       return res.status(403).json({ message: 'This account has been banned.' });
+    }
+
+    if (user.isDeleted) {
+      return res.status(403).json({ message: 'This account has been deleted.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -178,6 +184,44 @@ router.patch('/me', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ message: 'Server error updating profile.' });
+  }
+});
+
+router.delete('/me', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Delete all messages sent by or received by this user
+    await Message.deleteMany({
+      $or: [{ sender: userId }, { receiver: userId }]
+    });
+
+    // Delete all conversation settings for this user
+    await ConversationSettings.deleteMany({
+      $or: [{ userId: userId }, { otherUserId: userId }]
+    });
+
+    // Soft delete the user account
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        isDeleted: true,
+        deletedAt: new Date(),
+        isOnline: false,
+        displayName: `[Deleted User]`,
+        avatar: ''
+      },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    res.json({ message: 'Account deleted successfully. All your messages have been removed.' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ message: 'Server error deleting account.' });
   }
 });
 
@@ -326,7 +370,7 @@ router.get('/search', authMiddleware, async (req, res) => {
 
 router.get('/all-users', authMiddleware, async (req, res) => {
   try {
-    const users = await User.find({ _id: { $ne: req.user.userId } })
+    const users = await User.find({ _id: { $ne: req.user.userId }, isDeleted: { $ne: true } })
       .select('username displayName avatar isOnline lastSeen')
       .sort({ displayName: 1 })
       .lean();

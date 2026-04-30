@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { User, Lock, ArrowLeft, CheckCircle2, Trash2, AlertTriangle } from 'lucide-react';
 import api from '../services/api';
 
 export default function Profile() {
@@ -10,6 +10,8 @@ export default function Profile() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -45,6 +47,26 @@ export default function Profile() {
     } catch (err) {
       setError(err.message || 'Unable to update profile.');
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') {
+      setError('Please type "DELETE" to confirm account deletion.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      await api.deleteAccount();
+      // Clear local storage and redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      navigate('/');
+    } catch (err) {
+      setError(err.message || 'Unable to delete account.');
       setLoading(false);
     }
   };
@@ -100,7 +122,83 @@ export default function Profile() {
             {loading ? <span className="spinner" /> : <><CheckCircle2 size={18} /> Save Changes</>}
           </button>
         </form>
+
+        {/* Danger Zone */}
+        <div style={{ marginTop: '40px', padding: '24px', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '12px', background: 'rgba(239,68,68,0.05)' }}>
+          <h3 style={{ color: 'var(--danger)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={20} />
+            Danger Zone
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '20px' }}>
+            Once you delete your account, there is no going back. This will permanently delete your account and remove all your messages from our servers.
+          </p>
+          <button
+            className="btn btn-danger"
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={loading}
+          >
+            <Trash2 size={16} /> Delete Account
+          </button>
+        </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <AlertTriangle size={48} style={{ color: 'var(--danger)', marginBottom: '16px' }} />
+              <h2 style={{ color: 'var(--danger)' }}>Delete Account</h2>
+              <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>
+                This action cannot be undone. This will permanently delete your account and remove all your messages.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: '500' }}>
+                Type <strong>DELETE</strong> to confirm:
+              </label>
+              <input
+                className="input"
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="Type DELETE here"
+                autoFocus
+              />
+            </div>
+
+            {error && <div className="auth-error" style={{ marginBottom: '16px' }}>{error}</div>}
+
+            <div className="modal-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); setError(''); }}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleDeleteAccount}
+                disabled={loading || deleteConfirmText !== 'DELETE'}
+              >
+                {loading ? (
+                  <>
+                    <div className="spinner" style={{ width: '16px', height: '16px' }} />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    Delete Account
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

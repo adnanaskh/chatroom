@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu, User } from 'lucide-react';
+import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu, User, Settings, Eye, Check } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
+import ConversationSettings from './ConversationSettings';
 
 export default function Chat() {
   const [conversations, setConversations] = useState([]);
@@ -17,6 +18,7 @@ export default function Chat() {
   const [searchResults, setSearchResults] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [showConversationSettings, setShowConversationSettings] = useState(false);
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -295,8 +297,15 @@ export default function Chat() {
                   {conv.lastMessage}
                 </div>
               </div>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-                {formatTime(conv.lastMessageAt)}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                  {formatTime(conv.lastMessageAt)}
+                </div>
+                {conv.unreadCount > 0 && (
+                  <div className="unread-badge">
+                    {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -358,7 +367,7 @@ export default function Chat() {
         {activeChat ? (
           <>
             <div className="chat-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
                 {isMobile() && (
                   <button
                     className="btn btn-ghost btn-icon"
@@ -371,6 +380,7 @@ export default function Chat() {
                 <button
                   className="btn btn-ghost btn-icon"
                   onClick={goBackToList}
+                  title="Back to conversations"
                 >
                   <ArrowLeft size={20} />
                 </button>
@@ -378,12 +388,19 @@ export default function Chat() {
                   {activeChat.avatar ? <img src={activeChat.avatar} alt="" /> : getInitials(activeChat.displayName)}
                   <span className={`status-dot ${isUserOnline(activeChat._id) ? 'online' : 'offline'}`} />
                 </div>
-                <div>
-                  <h3 style={{ fontSize: '0.95rem' }}>{activeChat.displayName}</h3>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 style={{ fontSize: '0.95rem', margin: 0 }}>{activeChat.displayName}</h3>
                   <div style={{ fontSize: '0.75rem', color: isUserOnline(activeChat._id) ? 'var(--success)' : 'var(--text-muted)' }}>
                     {isUserOnline(activeChat._id) ? 'Online' : 'Offline'}
                   </div>
                 </div>
+                <button
+                  className="btn btn-ghost btn-icon"
+                  onClick={() => setShowConversationSettings(true)}
+                  title="Conversation settings"
+                >
+                  <Settings size={18} />
+                </button>
               </div>
             </div>
 
@@ -404,7 +421,18 @@ export default function Chat() {
                     <div className="message-content">
                       <span className="message-sender">{isOwn ? 'You' : activeChat.displayName}</span>
                       <div className="message-bubble">{msg.content}</div>
-                      <span className="message-time">{formatMsgTime(msg.createdAt)}</span>
+                      <div className="message-meta">
+                        <span className="message-time">{formatMsgTime(msg.createdAt)}</span>
+                        {isOwn && (
+                          <span className="message-status">
+                            {msg.seen ? (
+                              <Eye size={12} color="var(--success)" />
+                            ) : (
+                              <Check size={12} color="var(--text-muted)" />
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -444,6 +472,14 @@ export default function Chat() {
           </div>
         )}
       </div>
+
+      {showConversationSettings && activeChat && (
+        <ConversationSettings
+          userId={activeChat._id}
+          userName={activeChat.displayName}
+          onClose={() => setShowConversationSettings(false)}
+        />
+      )}
     </div>
   );
 }

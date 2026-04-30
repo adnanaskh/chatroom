@@ -67,6 +67,13 @@ const api = {
     });
   },
 
+  deleteAccount() {
+    return this._fetch('/api/auth/me', {
+      method: 'DELETE',
+      headers: this._headers(),
+    });
+  },
+
   getUsers() {
     return this._fetch('/api/auth/users', { headers: this._headers(true) });
   },
@@ -146,6 +153,20 @@ const api = {
     return this._fetch('/api/settings/messages', {
       method: 'DELETE',
       headers: this._headers(true),
+    });
+  },
+
+  getConversationSettings(userId) {
+    return this._fetch(`/api/messages/settings/${userId}`, {
+      headers: this._headers(),
+    });
+  },
+
+  updateConversationSettings(userId, settings) {
+    return this._fetch(`/api/messages/settings/${userId}`, {
+      method: 'PUT',
+      headers: this._headers(),
+      body: JSON.stringify(settings),
     });
   },
 };

@@ -21,6 +21,14 @@ const messageSchema = new mongoose.Schema({
     trim: true,
     maxlength: [2000, 'Message cannot exceed 2000 characters']
   },
+  seen: {
+    type: Boolean,
+    default: false
+  },
+  seenAt: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

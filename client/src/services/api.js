@@ -14,6 +14,7 @@ const api = {
   clearSession() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('chat_keys');
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
     window.location.href = '/';

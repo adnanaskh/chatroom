@@ -65,6 +65,20 @@ export default function Chat() {
         loadConversations(updatedUser, newKeys);
       } else {
         const parsedKeys = JSON.parse(storedKeys);
+        
+        // Mismatch check: if server has keys and they differ, trust the server (Cloud Sync)
+        if (currentUser.publicKey && currentUser.privateKey && currentUser.publicKey !== parsedKeys.publicKey) {
+          console.log("Local keys mismatch server keys. Restoring from server...");
+          const restoredKeys = {
+            publicKey: currentUser.publicKey,
+            privateKey: currentUser.privateKey
+          };
+          localStorage.setItem('chat_keys', JSON.stringify(restoredKeys));
+          setKeys(restoredKeys);
+          loadConversations(currentUser, restoredKeys);
+          return;
+        }
+
         setKeys(parsedKeys);
         
         // Ensure server has the public AND private key
@@ -380,6 +394,7 @@ export default function Chat() {
     disconnectSocket();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('chat_keys');
     navigate('/');
   };
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu } from 'lucide-react';
+import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu, User } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 
@@ -18,6 +18,7 @@ export default function Chat() {
   const [showSearch, setShowSearch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef(null);
+  const messageInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const activeChatRef = useRef(null);
@@ -160,6 +161,7 @@ export default function Chat() {
 
     setNewMessage('');
     socket.emit('typing:stop', { receiverId: activeChat._id });
+    messageInputRef.current?.focus();
   };
 
   const handleTyping = (e) => {
@@ -331,7 +333,7 @@ export default function Chat() {
           )}
         </div>
 
-        <div className="sidebar-footer">
+        <div className="sidebar-footer" style={{ alignItems: 'center' }}>
           <div className="current-user">
             <div className="user-avatar" style={{ width: 32, height: 32, fontSize: '0.7rem' }}>
               {getInitials(user.displayName)}
@@ -341,9 +343,14 @@ export default function Chat() {
               <div className="role">@{user.username}</div>
             </div>
           </div>
-          <button className="btn btn-ghost btn-icon" onClick={handleLogout} title="Logout">
-            <LogOut size={18} />
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-ghost btn-icon" onClick={() => navigate('/profile')} title="Profile">
+              <User size={18} />
+            </button>
+            <button className="btn btn-ghost btn-icon" onClick={handleLogout} title="Logout">
+              <LogOut size={18} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -352,6 +359,15 @@ export default function Chat() {
           <>
             <div className="chat-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {isMobile() && (
+                  <button
+                    className="btn btn-ghost btn-icon"
+                    onClick={() => setShowSidebar(true)}
+                    title="Open conversation list"
+                  >
+                    <Menu size={20} />
+                  </button>
+                )}
                 <button
                   className="btn btn-ghost btn-icon"
                   onClick={goBackToList}
@@ -405,9 +421,14 @@ export default function Chat() {
             <div className="chat-input-area">
               <form className="chat-input-wrapper" onSubmit={handleSend}>
                 <input
-                  className="input" placeholder={`Message ${activeChat.displayName}...`}
-                  value={newMessage} onChange={handleTyping} onKeyDown={handleKeyDown}
-                  autoFocus maxLength={2000}
+                  ref={messageInputRef}
+                  className="input"
+                  placeholder={`Message ${activeChat.displayName}...`}
+                  value={newMessage}
+                  onChange={handleTyping}
+                  onKeyDown={handleKeyDown}
+                  autoFocus
+                  maxLength={2000}
                 />
                 <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
                   <Send size={20} />

@@ -26,7 +26,8 @@ const messageSchema = new mongoose.Schema({
     default: Date.now
   }
 }, {
-  timestamps: false
+  timestamps: false,
+  collection: 'chatmeesage'
 });
 
 messageSchema.index({ sender: 1, receiver: 1, createdAt: -1 });

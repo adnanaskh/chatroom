@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, MessageSquare, Settings, LogOut, UserPlus, Trash2, KeyRound,
-  Clock, AlertTriangle, BarChart3, RefreshCw
+  Clock, AlertTriangle, BarChart3, RefreshCw, ShieldOff, ShieldCheck, Search
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [loading, setLoading] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '' });
+  const [searchQuery, setSearchQuery] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [ttlInput, setTtlInput] = useState('24');
   const [ttlUnit, setTtlUnit] = useState('hours');
@@ -80,6 +81,24 @@ export default function AdminDashboard() {
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) { setError(err.message); }
   };
+
+  const handleBanToggle = async (user) => {
+    try {
+      const action = user.isBanned ? 'unbanned' : 'banned';
+      await api.banUser(user._id, !user.isBanned, user.isBanned ? '' : 'Violation of chat rules');
+      setSuccess(`User ${action} successfully.`);
+      loadData();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const filteredUsers = users.filter((user) => {
+    if (!searchQuery.trim()) return true;
+    const value = searchQuery.toLowerCase();
+    return user.username.toLowerCase().includes(value) || user.displayName.toLowerCase().includes(value);
+  });
 
   const handleUpdateTTL = async () => {
     const multiplier = ttlUnit === 'days' ? 86400 : ttlUnit === 'hours' ? 3600 : 60;
@@ -151,16 +170,31 @@ export default function AdminDashboard() {
         {/* USERS TAB */}
         {tab === 'users' && (
           <>
-            <div className="admin-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div className="admin-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
               <div>
                 <h1>User Management</h1>
-                <p>Create, manage, and remove chat users</p>
+                <p>Create, manage, and protect conversations with industry-level controls</p>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button className="btn btn-secondary btn-sm" onClick={loadData}><RefreshCw size={14} /></button>
                 <button className="btn btn-primary btn-sm" onClick={() => { setShowCreateModal(true); setError(''); }}>
                   <UserPlus size={14} /> Create User
                 </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '18px' }}>
+              <div style={{ flex: 1 }}>
+                <input
+                  className="input"
+                  type="search"
+                  placeholder="Search users by name or username"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                <Search size={18} /> {filteredUsers.length}/{users.length} users
               </div>
             </div>
 
@@ -182,19 +216,25 @@ export default function AdminDashboard() {
                 <table className="data-table">
                   <thead><tr><th>User</th><th>Username</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
                   <tbody>
-                    {users.map((u) => (
+                    {filteredUsers.map((u) => (
                       <tr key={u._id}>
                         <td style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <img src={u.avatar} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} />
                           {u.displayName}
                         </td>
                         <td style={{ color: 'var(--text-secondary)' }}>{u.username}</td>
-                        <td><span className={`badge ${u.isOnline ? 'badge-success' : 'badge-muted'}`}>{u.isOnline ? 'Online' : 'Offline'}</span></td>
+                        <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <span className={`badge ${u.isOnline ? 'badge-success' : 'badge-muted'}`}>{u.isOnline ? 'Online' : 'Offline'}</span>
+                          {u.isBanned && <span className="badge badge-danger">Banned</span>}
+                        </td>
                         <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{new Date(u.createdAt).toLocaleDateString()}</td>
                         <td>
-                          <div style={{ display: 'flex', gap: '6px' }}>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                             <button className="btn btn-ghost btn-sm" title="Reset Password" onClick={() => { setShowResetModal(u); setNewPassword(''); setError(''); }}>
                               <KeyRound size={14} />
+                            </button>
+                            <button className="btn btn-ghost btn-sm" style={{ color: u.isBanned ? 'var(--success)' : 'var(--warning)' }} title={u.isBanned ? 'Unban User' : 'Ban User'} onClick={() => handleBanToggle(u)}>
+                              {u.isBanned ? <ShieldCheck size={14} /> : <ShieldOff size={14} />}
                             </button>
                             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} title="Delete" onClick={() => setShowDeleteConfirm(u)}>
                               <Trash2 size={14} />
@@ -203,8 +243,8 @@ export default function AdminDashboard() {
                         </td>
                       </tr>
                     ))}
-                    {users.length === 0 && (
-                      <tr><td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No users created yet</td></tr>
+                    {filteredUsers.length === 0 && (
+                      <tr><td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No users match your search</td></tr>
                     )}
                   </tbody>
                 </table>

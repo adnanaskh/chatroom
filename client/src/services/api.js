@@ -11,10 +11,23 @@ const api = {
     };
   },
 
+  clearSession() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminUser');
+    window.location.href = '/';
+  },
+
   async _fetch(url, options = {}) {
     const res = await fetch(`${API_URL}${url}`, options);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Request failed');
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      if (res.status === 401) {
+        this.clearSession();
+      }
+      throw new Error(data?.message || 'Request failed');
+    }
     return data;
   },
 
@@ -31,6 +44,26 @@ const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+    });
+  },
+
+  registerUser(data) {
+    return this._fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  getProfile() {
+    return this._fetch('/api/auth/me', { headers: this._headers() });
+  },
+
+  updateProfile(data) {
+    return this._fetch('/api/auth/me', {
+      method: 'PATCH',
+      headers: this._headers(),
+      body: JSON.stringify(data),
     });
   },
 
@@ -58,6 +91,14 @@ const api = {
       method: 'PATCH',
       headers: this._headers(true),
       body: JSON.stringify({ password }),
+    });
+  },
+
+  banUser(id, isBanned, reason = '') {
+    return this._fetch(`/api/auth/users/${id}/ban`, {
+      method: 'PATCH',
+      headers: this._headers(true),
+      body: JSON.stringify({ isBanned, reason }),
     });
   },
 

@@ -54,6 +54,10 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
+    if (user.isBanned) {
+      return res.status(403).json({ message: 'This account has been banned.' });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials.' });
@@ -83,6 +87,116 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     console.error('User login error:', error);
     res.status(500).json({ message: 'Server error during login.' });
+  }
+});
+
+router.post('/register', async (req, res) => {
+  try {
+    const { username, password, displayName } = req.body;
+
+    if (!username || !password || !displayName) {
+      return res.status(400).json({ message: 'Username, password, and display name are required.' });
+    }
+
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(409).json({ message: 'Username already exists.' });
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=fff&size=128&bold=true`;
+
+    const user = new User({
+      username,
+      password: hashedPassword,
+      displayName,
+      avatar,
+      createdBy: 'self'
+    });
+
+    await user.save();
+
+    const token = jwt.sign(
+      { userId: user._id, username: user.username, isAdmin: false },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      message: 'Registration successful',
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        displayName: user.displayName,
+        avatar: user.avatar,
+        isAdmin: false
+      }
+    });
+  } catch (error) {
+    console.error('User register error:', error);
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'Username already exists.' });
+    }
+    res.status(500).json({ message: 'Server error during registration.' });
+  }
+});
+
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ message: 'Server error fetching profile.' });
+  }
+});
+
+router.patch('/me', authMiddleware, async (req, res) => {
+  try {
+    const { displayName, password } = req.body;
+    const updates = {};
+    if (displayName) updates.displayName = displayName.trim();
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+      }
+      const salt = await bcrypt.genSalt(12);
+      updates.password = await bcrypt.hash(password, salt);
+    }
+
+    const user = await User.findByIdAndUpdate(req.user.userId, updates, { new: true }).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    res.json({ message: 'Profile updated successfully.', user });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ message: 'Server error updating profile.' });
+  }
+});
+
+router.patch('/users/:id/ban', adminMiddleware, async (req, res) => {
+  try {
+    const { isBanned, reason } = req.body;
+    const updates = {
+      isBanned: Boolean(isBanned),
+      banReason: isBanned ? (reason || 'No reason provided') : '',
+      bannedAt: isBanned ? new Date() : null
+    };
+    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true }).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    res.json({ message: `User has been ${isBanned ? 'banned' : 'unbanned'}.`, user });
+  } catch (error) {
+    console.error('Ban user error:', error);
+    res.status(500).json({ message: 'Server error updating ban status.' });
   }
 });
 

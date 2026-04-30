@@ -45,14 +45,18 @@ const io = new Server(server, {
 const connectedUsers = new Map();
 const userSockets = new Map();
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const token = socket.handshake.auth.token;
   if (!token) {
     return next(new Error('Authentication required'));
   }
-  
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const currentUser = await User.findById(decoded.userId).select('isBanned');
+    if (!currentUser || currentUser.isBanned) {
+      return next(new Error('User is banned or invalid'));
+    }
     socket.user = decoded;
     next();
   } catch (error) {

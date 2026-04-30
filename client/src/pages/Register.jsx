@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, Shield, MessageCircle, UserPlus } from 'lucide-react';
+import { UserPlus, MessageCircle, ArrowLeft } from 'lucide-react';
 import api from '../services/api';
 
-export default function UserLogin() {
+export default function Register() {
   const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,12 +16,12 @@ export default function UserLogin() {
     setError('');
     setLoading(true);
     try {
-      const data = await api.userLogin(username, password);
+      const data = await api.registerUser({ username, displayName, password });
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/chat');
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }
@@ -32,8 +33,8 @@ export default function UserLogin() {
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
           <MessageCircle size={40} style={{ color: '#6366f1' }} />
         </div>
-        <h1>Welcome Back</h1>
-        <p className="subtitle">Sign in to continue chatting</p>
+        <h1>Create Account</h1>
+        <p className="subtitle">Sign up and start chatting instantly</p>
 
         {error && <div className="auth-error">{error}</div>}
 
@@ -41,30 +42,54 @@ export default function UserLogin() {
           <div className="input-group">
             <label>Username</label>
             <input
-              className="input" type="text" placeholder="Enter your username"
-              value={username} onChange={(e) => setUsername(e.target.value)}
-              required autoFocus
+              className="input"
+              type="text"
+              placeholder="Pick a username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+          <div className="input-group">
+            <label>Display Name</label>
+            <input
+              className="input"
+              type="text"
+              placeholder="What should people call you?"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
             />
           </div>
           <div className="input-group">
             <label>Password</label>
             <input
-              className="input" type="password" placeholder="Enter your password"
-              value={password} onChange={(e) => setPassword(e.target.value)}
+              className="input"
+              type="password"
+              placeholder="Create a password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               required
+              minLength={6}
             />
           </div>
           <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? <span className="spinner" /> : <><LogIn size={18} /> Sign In</>}
+            {loading ? <span className="spinner" /> : <><UserPlus size={18} /> Register</>}
           </button>
         </form>
 
         <div className="auth-links" style={{ justifyContent: 'space-between' }}>
-          <a href="/register" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <UserPlus size={14} /> Create Account
-          </a>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => navigate('/')}
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            <ArrowLeft size={14} /> Back to Sign In
+          </button>
           <a href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Shield size={14} /> Admin Panel
+            Admin Panel
           </a>
         </div>
       </div>

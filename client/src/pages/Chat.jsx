@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu, User, Settings, Eye, Check } from 'lucide-react';
+import { Send, LogOut, Search, MessageCircle, ArrowLeft, X, Menu, User, Settings, Eye, Check, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 import ConversationSettings from './ConversationSettings';
@@ -19,7 +19,6 @@ export default function Chat() {
   const [showSearch, setShowSearch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [showConversationSettings, setShowConversationSettings] = useState(false);
-  const [requestStatus, setRequestStatus] = useState(null);
   const [isNewUser, setIsNewUser] = useState(false);
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
@@ -94,6 +93,18 @@ export default function Chat() {
     return () => disconnectSocket();
   }, [navigate, scrollToBottom]);
 
+  // Prevent backspace from triggering browser back navigation on mobile
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Backspace' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const loadConversations = async () => {
     try {
       const [convData, usersData] = await Promise.all([
@@ -111,7 +122,6 @@ export default function Chat() {
   const openChat = async (chatUser) => {
     setActiveChat(chatUser);
     setMessages([]);
-    setRequestStatus(null);
     setShowSearch(false);
     setSearchQuery('');
     setSearchResults([]);
@@ -121,7 +131,6 @@ export default function Chat() {
     try {
       const data = await api.getConversation(chatUser._id);
       setMessages(data.messages);
-      setRequestStatus(data.request);
       setTimeout(scrollToBottom, 100);
     } catch (err) {
       console.error('Failed to load messages:', err);
@@ -131,7 +140,6 @@ export default function Chat() {
   const goBackToList = () => {
     setActiveChat(null);
     setMessages([]);
-    setRequestStatus(null);
     if (isMobile()) {
       setShowSidebar(true);
     }
@@ -156,34 +164,23 @@ export default function Chat() {
     }, 300);
   };
 
-  const sendRequest = async () => {
+  const handleDeleteConversation = async () => {
     if (!activeChat) return;
-    try {
-      const request = await api.sendRequest(activeChat._id);
-      setRequestStatus(request);
-    } catch (err) {
-      console.error('Failed to send request:', err);
-    }
-  };
-
-  const respondToRequest = async (action) => {
-    if (!requestStatus) return;
-    try {
-      const updatedRequest = await api.respondToRequest(requestStatus._id, action);
-      setRequestStatus(updatedRequest);
-      if (action === 'accept') {
-        // Reload messages after accepting
-        const data = await api.getConversation(activeChat._id);
-        setMessages(data.messages);
+    if (window.confirm(`Are you sure you want to delete the entire conversation with ${activeChat.displayName}?`)) {
+      try {
+        await api.deleteConversation(activeChat._id);
+        setMessages([]);
+        loadConversations();
+        goBackToList();
+      } catch (err) {
+        console.error('Failed to delete conversation:', err);
       }
-    } catch (err) {
-      console.error('Failed to respond to request:', err);
     }
   };
 
   const handleSend = (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !activeChat || requestStatus?.status !== 'accepted') return;
+    if (!newMessage.trim() || !activeChat) return;
 
     const socket = getSocket();
     if (!socket) return;
@@ -429,6 +426,13 @@ export default function Chat() {
                 </div>
                 <button
                   className="btn btn-ghost btn-icon"
+                  onClick={handleDeleteConversation}
+                  title="Delete conversation"
+                >
+                  <Trash2 size={18} />
+                </button>
+                <button
+                  className="btn btn-ghost btn-icon"
                   onClick={() => setShowConversationSettings(true)}
                   title="Conversation settings"
                 >
@@ -438,41 +442,7 @@ export default function Chat() {
             </div>
 
             <div className="messages-area">
-              {requestStatus && requestStatus.status !== 'accepted' && (
-                <div className="request-banner">
-                  {requestStatus.status === 'pending' && requestStatus.requesterId === user.id && (
-                    <div className="request-pending">
-                      <MessageCircle size={20} />
-                      <span>Request sent to {activeChat.displayName}. Waiting for response...</span>
-                    </div>
-                  )}
-                  {requestStatus.status === 'pending' && requestStatus.receiverId === user.id && (
-                    <div className="request-incoming">
-                      <MessageCircle size={20} />
-                      <span>{requestStatus.requesterName} wants to chat with you</span>
-                      <div className="request-actions">
-                        <button className="btn btn-success btn-sm" onClick={() => respondToRequest('accept')}>
-                          Accept
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => respondToRequest('reject')}>
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {requestStatus.status === 'rejected' && (
-                    <div className="request-rejected">
-                      <X size={20} />
-                      <span>Chat request was rejected</span>
-                      <button className="btn btn-primary btn-sm" onClick={sendRequest}>
-                        Send New Request
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {messages.length === 0 && (!requestStatus || requestStatus.status === 'accepted') && (
+              {messages.length === 0 && (
                 <div className="empty-state">
                   <MessageCircle size={48} />
                   <h3>Start a conversation</h3>
@@ -508,47 +478,28 @@ export default function Chat() {
             </div>
 
             <div className="typing-indicator">
-              {typingUsers.length > 0 && requestStatus?.status === 'accepted' && (
+              {typingUsers.length > 0 && (
                 <span>{activeChat.displayName} is typing...</span>
               )}
             </div>
 
-            {(!requestStatus || requestStatus.status === 'accepted') && (
-              <div className="chat-input-area">
-                <form className="chat-input-wrapper" onSubmit={handleSend}>
-                  <input
-                    ref={messageInputRef}
-                    className="input"
-                    placeholder={`Message ${activeChat.displayName}...`}
-                    value={newMessage}
-                    onChange={handleTyping}
-                    onKeyDown={handleKeyDown}
-                    autoFocus
-                    maxLength={2000}
-                  />
-                  <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
-                    <Send size={20} />
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {requestStatus && requestStatus.status !== 'accepted' && requestStatus.requesterId !== user.id && (
-              <div className="chat-input-area">
-                <div className="request-input-placeholder">
-                  {requestStatus.status === 'pending' ? (
-                    <span>Waiting for {activeChat.displayName} to accept your request...</span>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <span>Request rejected</span>
-                      <button className="btn btn-primary btn-sm" onClick={sendRequest}>
-                        Send New Request
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            <div className="chat-input-area">
+              <form className="chat-input-wrapper" onSubmit={handleSend}>
+                <input
+                  ref={messageInputRef}
+                  className="input"
+                  placeholder={`Message ${activeChat.displayName}...`}
+                  value={newMessage}
+                  onChange={handleTyping}
+                  onKeyDown={handleKeyDown}
+                  autoFocus
+                  maxLength={2000}
+                />
+                <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
+                  <Send size={20} />
+                </button>
+              </form>
+            </div>
           </>
         ) : (
           <div className="empty-state" onClick={() => { if (isMobile()) setShowSidebar(true); }}>

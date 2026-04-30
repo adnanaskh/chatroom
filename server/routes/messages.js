@@ -2,7 +2,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const Message = require('../models/Message');
 const User = require('../models/User');
-const ChatRequest = require('../models/ChatRequest');
 const ConversationSettings = require('../models/ConversationSettings');
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
@@ -56,21 +55,6 @@ router.get('/conversation/:userId', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    const chatRequest = await ChatRequest.findOne({
-      $or: [
-        { requesterId: myId, receiverId: otherId },
-        { requesterId: otherId, receiverId: myId }
-      ]
-    });
-
-    if (chatRequest && chatRequest.status !== 'accepted') {
-      return res.json({
-        request: chatRequest,
-        messages: [],
-        pagination: { page, limit, total: 0, pages: 0 }
-      });
-    }
-
     // Mark messages as seen when viewing conversation
     await Message.updateMany(
       { sender: otherId, receiver: myId, seen: false },
@@ -101,7 +85,6 @@ router.get('/conversation/:userId', authMiddleware, async (req, res) => {
     }));
 
     res.json({
-      request: chatRequest || null,
       messages: decryptedMessages,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     });
@@ -224,129 +207,22 @@ router.put('/settings/:userId', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/requests', authMiddleware, async (req, res) => {
-  try {
-    const myId = req.user.userId;
-    const requests = await ChatRequest.find({
-      $or: [
-        { requesterId: myId },
-        { receiverId: myId }
-      ]
-    }).sort({ updatedAt: -1 }).lean();
-
-    res.json(requests);
-  } catch (error) {
-    console.error('Get requests error:', error);
-    res.status(500).json({ message: 'Server error fetching requests.' });
-  }
-});
-
-router.get('/requests/:userId', authMiddleware, async (req, res) => {
+router.delete('/conversation/:userId', authMiddleware, async (req, res) => {
   try {
     const myId = req.user.userId;
     const otherId = req.params.userId;
 
-    const request = await ChatRequest.findOne({
+    await Message.deleteMany({
       $or: [
-        { requesterId: myId, receiverId: otherId },
-        { requesterId: otherId, receiverId: myId }
-      ]
-    }).lean();
-
-    res.json(request || { status: 'none' });
-  } catch (error) {
-    console.error('Get request status error:', error);
-    res.status(500).json({ message: 'Server error fetching request status.' });
-  }
-});
-
-router.post('/requests', authMiddleware, async (req, res) => {
-  try {
-    const myId = req.user.userId;
-    const { receiverId } = req.body;
-
-    if (!receiverId || receiverId === myId) {
-      return res.status(400).json({ message: 'Invalid request target.' });
-    }
-
-    const existingUser = await User.findById(receiverId);
-    if (!existingUser || existingUser.isDeleted) {
-      return res.status(404).json({ message: 'User not found.' });
-    }
-
-    const existingRequest = await ChatRequest.findOne({
-      $or: [
-        { requesterId: myId, receiverId },
-        { requesterId: receiverId, receiverId: myId }
+        { sender: myId, receiver: otherId },
+        { sender: otherId, receiver: myId }
       ]
     });
 
-    if (existingRequest) {
-      if (existingRequest.status === 'accepted') {
-        return res.status(400).json({ message: 'Conversation is already accepted.' });
-      }
-      if (existingRequest.status === 'pending') {
-        return res.status(400).json({ message: 'A request is already pending.' });
-      }
-      if (existingRequest.status === 'rejected') {
-        existingRequest.status = 'pending';
-        existingRequest.requesterId = myId;
-        existingRequest.receiverId = receiverId;
-        existingRequest.requesterName = req.user.username;
-        existingRequest.receiverName = existingUser.username;
-        existingRequest.updatedAt = new Date();
-        await existingRequest.save();
-        return res.json(existingRequest);
-      }
-    }
-
-    const request = new ChatRequest({
-      requesterId: myId,
-      receiverId,
-      requesterName: req.user.username,
-      receiverName: existingUser.username
-    });
-    await request.save();
-
-    res.status(201).json(request);
+    res.json({ message: 'Conversation deleted successfully' });
   } catch (error) {
-    console.error('Create request error:', error);
-    if (error.code === 11000) {
-      return res.status(400).json({ message: 'A request already exists.' });
-    }
-    res.status(500).json({ message: 'Server error creating request.' });
-  }
-});
-
-router.patch('/requests/:id', authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { action } = req.body;
-    const request = await ChatRequest.findById(req.params.id);
-
-    if (!request) {
-      return res.status(404).json({ message: 'Request not found.' });
-    }
-
-    if (request.receiverId.toString() !== userId) {
-      return res.status(403).json({ message: 'Only the request receiver can accept or reject.' });
-    }
-
-    if (action === 'accept') {
-      request.status = 'accepted';
-    } else if (action === 'reject') {
-      request.status = 'rejected';
-    } else {
-      return res.status(400).json({ message: 'Invalid action.' });
-    }
-
-    request.updatedAt = new Date();
-    await request.save();
-
-    res.json(request);
-  } catch (error) {
-    console.error('Update request status error:', error);
-    res.status(500).json({ message: 'Server error updating request.' });
+    console.error('Delete conversation error:', error);
+    res.status(500).json({ message: 'Server error deleting conversation.' });
   }
 });
 

@@ -170,31 +170,10 @@ const api = {
     });
   },
 
-  getRequests() {
-    return this._fetch('/api/messages/requests', {
+  deleteConversation(userId) {
+    return this._fetch(`/api/messages/conversation/${userId}`, {
+      method: 'DELETE',
       headers: this._headers(),
-    });
-  },
-
-  getRequestStatus(userId) {
-    return this._fetch(`/api/messages/requests/${userId}`, {
-      headers: this._headers(),
-    });
-  },
-
-  sendRequest(receiverId) {
-    return this._fetch('/api/messages/requests', {
-      method: 'POST',
-      headers: this._headers(),
-      body: JSON.stringify({ receiverId }),
-    });
-  },
-
-  respondToRequest(requestId, action) {
-    return this._fetch(`/api/messages/requests/${requestId}`, {
-      method: 'PATCH',
-      headers: this._headers(),
-      body: JSON.stringify({ action }),
     });
   },
 };

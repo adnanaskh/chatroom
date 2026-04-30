@@ -199,7 +199,27 @@ export default function Chat() {
       setTypingUsers((prev) => prev.filter((u) => u !== username));
     });
 
-    return () => disconnectSocket();
+    socket.on('connect', () => {
+      loadConversations();
+      if (activeChatRef.current) {
+        openChat(activeChatRef.current, true);
+      }
+    });
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadConversations();
+        if (activeChatRef.current) {
+          openChat(activeChatRef.current, true);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      disconnectSocket();
+    };
   }, [navigate, scrollToBottom]);
 
   const loadConversations = async (u = user, k = keys) => {
@@ -239,18 +259,22 @@ export default function Chat() {
     }
   };
 
-  const openChat = async (chatUser) => {
-    setActiveChat(chatUser);
-    setMessages([]);
-    setShowSearch(false);
-    setSearchQuery('');
-    setSearchResults([]);
-    setTypingUsers([]);
-    if (isMobile()) setShowSidebar(false);
+  const openChat = async (chatUser, silent = false) => {
+    if (!silent) {
+      setActiveChat(chatUser);
+      setMessages([]);
+      setShowSearch(false);
+      setSearchQuery('');
+      setSearchResults([]);
+      setTypingUsers([]);
+      if (isMobile()) setShowSidebar(false);
+    }
 
     try {
       const data = await api.getConversation(chatUser._id);
-      const currentUserId = user.id || user._id;
+      const currentUser = JSON.parse(localStorage.getItem('user'));
+      if (!currentUser) return;
+      const currentUserId = currentUser.id || currentUser._id;
       
       const decryptedMessages = await Promise.all(
         data.messages.map(async (msg) => {
@@ -258,14 +282,14 @@ export default function Chat() {
           const keyToDecrypt = isOwn ? msg.senderEncryptedKey : msg.encryptedKey;
           const content = await encryption.decryptMessage(
             { ...msg, encryptedKey: keyToDecrypt }, 
-            keysRef.current.privateKey
+            keysRef.current?.privateKey || JSON.parse(localStorage.getItem('chat_keys')).privateKey
           );
           return { ...msg, content };
         })
       );
       
       setMessages(decryptedMessages);
-      setTimeout(scrollToBottom, 100);
+      if (!silent) setTimeout(scrollToBottom, 100);
     } catch (err) {
       console.error('Failed to load messages:', err);
     }
@@ -440,11 +464,17 @@ export default function Chat() {
         {showSearch && (
           <div style={{ padding: '6px 12px' }}>
             <input
+              type="text"
+              name="search_query"
+              id="search_query"
               className="input"
               placeholder="Search by username..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
               autoFocus
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck="false"
             />
             {searchResults.length > 0 && (
               <div className="user-list" style={{ maxHeight: '200px', marginTop: '4px', padding: '0' }}>
@@ -660,6 +690,9 @@ export default function Chat() {
               <div className="chat-input-area">
                 <form className="chat-input-wrapper" onSubmit={handleSend}>
                   <input
+                    type="text"
+                    name="chat_message"
+                    id="chat_message"
                     ref={messageInputRef}
                     className="input"
                     placeholder={`Message ${activeChat.displayName}...`}
@@ -669,6 +702,8 @@ export default function Chat() {
                     autoFocus
                     maxLength={2000}
                     autoComplete="off"
+                    autoCorrect="on"
+                    spellCheck="true"
                   />
                   <button className="btn btn-primary btn-icon" type="submit" disabled={!newMessage.trim()}>
                     <Send size={18} />

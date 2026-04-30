@@ -40,17 +40,26 @@ export default function Chat() {
       const storedKeys = localStorage.getItem('chat_keys');
       const currentUser = JSON.parse(localStorage.getItem('user'));
       
-      if (!storedKeys) {
+      if (!storedKeys && currentUser.privateKey && currentUser.publicKey) {
+        console.log("Restoring keys from server...");
+        const restoredKeys = {
+          publicKey: currentUser.publicKey,
+          privateKey: currentUser.privateKey
+        };
+        localStorage.setItem('chat_keys', JSON.stringify(restoredKeys));
+        setKeys(restoredKeys);
+        loadConversations(currentUser, restoredKeys);
+      } else if (!storedKeys) {
         console.log("Generating new E2EE keys...");
         const newKeys = await encryption.generateKeyPair();
         localStorage.setItem('chat_keys', JSON.stringify(newKeys));
         setKeys(newKeys);
         
-        // Upload public key to server
-        await api.updateProfile({ publicKey: newKeys.publicKey });
+        // Upload public & private key to server
+        await api.updateProfile({ publicKey: newKeys.publicKey, privateKey: newKeys.privateKey });
         
         // Update local user state
-        const updatedUser = { ...currentUser, publicKey: newKeys.publicKey };
+        const updatedUser = { ...currentUser, publicKey: newKeys.publicKey, privateKey: newKeys.privateKey };
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
         loadConversations(updatedUser, newKeys);
@@ -58,10 +67,10 @@ export default function Chat() {
         const parsedKeys = JSON.parse(storedKeys);
         setKeys(parsedKeys);
         
-        // Ensure server has the public key
-        if (!currentUser.publicKey) {
-          await api.updateProfile({ publicKey: parsedKeys.publicKey });
-          const updatedUser = { ...currentUser, publicKey: parsedKeys.publicKey };
+        // Ensure server has the public AND private key
+        if (!currentUser.publicKey || !currentUser.privateKey) {
+          await api.updateProfile({ publicKey: parsedKeys.publicKey, privateKey: parsedKeys.privateKey });
+          const updatedUser = { ...currentUser, publicKey: parsedKeys.publicKey, privateKey: parsedKeys.privateKey };
           setUser(updatedUser);
           localStorage.setItem('user', JSON.stringify(updatedUser));
         }

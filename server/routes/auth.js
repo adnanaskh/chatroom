@@ -112,7 +112,8 @@ router.post('/login', async (req, res) => {
         avatar: user.avatar,
         isAdmin: false,
         blockedUsers: user.blockedUsers || [],
-        publicKey: user.publicKey
+        publicKey: user.publicKey,
+        privateKey: user.privateKey
       }
     });
   } catch (error) {
@@ -166,7 +167,9 @@ router.post('/register', async (req, res) => {
         displayName: user.displayName,
         avatar: user.avatar,
         isAdmin: false,
-        blockedUsers: []
+        blockedUsers: [],
+        publicKey: null,
+        privateKey: null
       }
     });
   } catch (error) {
@@ -193,10 +196,11 @@ router.get('/me', authMiddleware, async (req, res) => {
 
 router.patch('/me', authMiddleware, async (req, res) => {
   try {
-    const { displayName, password, publicKey } = req.body;
+    const { displayName, password, publicKey, privateKey } = req.body;
     const updates = {};
     if (displayName) updates.displayName = displayName.trim();
     if (publicKey) updates.publicKey = publicKey;
+    if (privateKey) updates.privateKey = privateKey;
     if (password) {
       if (password.length < 6) {
         return res.status(400).json({ message: 'Password must be at least 6 characters.' });

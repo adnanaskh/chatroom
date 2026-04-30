@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, Shield } from 'lucide-react';
-import api from '../services/api';
+import { LogIn, Shield, ArrowLeft } from 'lucide-react';
+import api from '../../services/api';
 
 export default function AdminLogin() {
   const [username, setUsername] = useState('');
@@ -9,6 +9,12 @@ export default function AdminLogin() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (localStorage.getItem('adminToken')) {
+      navigate('/chat/dashboard');
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,7 +24,7 @@ export default function AdminLogin() {
       const data = await api.adminLogin(username, password);
       localStorage.setItem('adminToken', data.token);
       localStorage.setItem('adminUser', JSON.stringify(data.user));
-      navigate('/admin/dashboard');
+      navigate('/chat/dashboard');
     } catch (err) {
       setError(err.message);
     } finally {

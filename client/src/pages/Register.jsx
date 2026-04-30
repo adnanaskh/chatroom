@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserPlus, ArrowLeft } from 'lucide-react';
 import api from '../services/api';
@@ -12,6 +12,12 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (localStorage.getItem('token') && localStorage.getItem('user')) {
+      navigate('/chat', { replace: true });
+    }
+  }, [navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!acceptedTerms) { setError('You must accept the terms.'); return; }
@@ -20,7 +26,7 @@ export default function Register() {
       const data = await api.registerUser({ username, displayName, password });
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      navigate('/chat');
+      navigate('/chat', { replace: true });
     } catch (err) {
       setError(err.message || 'Registration failed.');
     } finally { setLoading(false); }
@@ -69,7 +75,6 @@ export default function Register() {
           </button>
           <div style={{ display: 'flex', gap: '16px' }}>
             <a href="/about">About</a>
-            <a href="/admin">Admin</a>
           </div>
         </div>
       </div>

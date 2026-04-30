@@ -458,7 +458,7 @@ export default function Chat() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('chat_keys');
-    navigate('/');
+    navigate('/', { replace: true });
   };
 
   const formatTime = (date) => {

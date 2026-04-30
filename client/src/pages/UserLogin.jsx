@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, Shield, UserPlus } from 'lucide-react';
 import api from '../services/api';
@@ -10,6 +10,12 @@ export default function UserLogin() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (localStorage.getItem('token') && localStorage.getItem('user')) {
+      navigate('/chat', { replace: true });
+    }
+  }, [navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -18,7 +24,7 @@ export default function UserLogin() {
       const data = await api.userLogin(username, password);
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      navigate('/chat');
+      navigate('/chat', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -50,12 +56,9 @@ export default function UserLogin() {
           </button>
         </form>
 
-        <div className="auth-links" style={{ justifyContent: 'space-between' }}>
+        <div className="auth-links" style={{ justifyContent: 'center' }}>
           <a href="/register" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <UserPlus size={13} /> Create Account
-          </a>
-          <a href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Shield size={13} /> Admin
           </a>
         </div>
       </div>

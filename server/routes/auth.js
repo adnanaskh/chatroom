@@ -421,6 +421,16 @@ router.get('/activity/all', adminMiddleware, async (req, res) => {
   }
 });
 
+router.delete('/activity/all', adminMiddleware, async (req, res) => {
+  try {
+    const result = await ActivityLog.deleteMany({});
+    res.json({ message: `Cleared ${result.deletedCount} activity logs.` });
+  } catch (error) {
+    console.error('Delete all activity error:', error);
+    res.status(500).json({ message: 'Server error deleting all activity logs.' });
+  }
+});
+
 // Get tracking summary stats for admin dashboard
 router.get('/tracking/summary', adminMiddleware, async (req, res) => {
   try {
@@ -455,6 +465,17 @@ router.get('/tracking/summary', adminMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Get tracking summary error:', error);
     res.status(500).json({ message: 'Server error fetching tracking data.' });
+  }
+});
+
+router.delete('/users/all', adminMiddleware, async (req, res) => {
+  try {
+    const result = await User.deleteMany({ username: { $ne: process.env.ADMIN_USERNAME } });
+    await ConversationSettings.deleteMany({});
+    res.json({ message: `Deleted ${result.deletedCount} standard users.` });
+  } catch (error) {
+    console.error('Delete all users error:', error);
+    res.status(500).json({ message: 'Server error deleting all users.' });
   }
 });
 

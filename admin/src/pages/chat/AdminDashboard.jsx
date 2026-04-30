@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, MessageSquare, LogOut, UserPlus, Trash2, KeyRound, AlertTriangle, RefreshCw, ShieldOff, ShieldCheck, Search, Activity, Globe, Monitor, X, Eye } from 'lucide-react';
-import api from '../services/api';
+import api from '../../services/api';
 
 export default function AdminDashboard() {
   const [tab, setTab] = useState('users');
@@ -24,7 +24,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!localStorage.getItem('adminToken')) { navigate('/admin'); return; }
+    if (!localStorage.getItem('adminToken')) { navigate('/chat'); return; }
     loadData();
   }, [navigate]);
 
@@ -96,6 +96,22 @@ export default function AdminDashboard() {
     } catch (err) { setError(err.message); }
   };
 
+  const handleClearUsers = async () => {
+    if (!window.confirm('Delete ALL standard users? This cannot be undone.')) return;
+    try {
+      const res = await api.clearUsers();
+      setSuccess(res.message); loadData(); setTimeout(() => setSuccess(''), 3000);
+    } catch (err) { setError(err.message); }
+  };
+
+  const handleClearLogs = async () => {
+    if (!window.confirm('Delete ALL tracking and activity logs?')) return;
+    try {
+      const res = await api.clearActivityLogs();
+      setSuccess(res.message); loadTracking(); setTimeout(() => setSuccess(''), 3000);
+    } catch (err) { setError(err.message); }
+  };
+
   const filteredUsers = users.filter((u) => {
     if (!searchQuery.trim()) return true;
     const v = searchQuery.toLowerCase();
@@ -133,7 +149,7 @@ export default function AdminDashboard() {
         </div>
         <div style={{ padding: '14px', borderTop: '1px solid var(--border)' }}>
           <button className="btn btn-ghost" style={{ width: '100%' }} onClick={() => {
-            localStorage.removeItem('adminToken'); localStorage.removeItem('adminUser'); navigate('/admin');
+            localStorage.removeItem('adminToken'); localStorage.removeItem('adminUser'); navigate('/chat');
           }}><LogOut size={14} /> <span>Logout</span></button>
         </div>
       </div>
@@ -208,6 +224,13 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div className="card" style={{ textAlign: 'center', padding: '32px', marginTop: '24px' }}>
+            <AlertTriangle size={28} style={{ color: 'var(--danger)', marginBottom: '10px' }} />
+            <h3 style={{ marginBottom: '6px', fontSize: '1rem' }}>Danger Zone</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '16px' }}>Clear all standard user accounts permanently.</p>
+            <button className="btn btn-danger btn-sm" onClick={handleClearUsers}><Trash2 size={14} /> Clear All Users</button>
           </div>
         </>)}
 
@@ -287,6 +310,13 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div className="card" style={{ textAlign: 'center', padding: '32px', marginTop: '24px' }}>
+            <AlertTriangle size={28} style={{ color: 'var(--danger)', marginBottom: '10px' }} />
+            <h3 style={{ marginBottom: '6px', fontSize: '1rem' }}>Danger Zone</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '16px' }}>Clear all tracking data and activity logs permanently.</p>
+            <button className="btn btn-danger btn-sm" onClick={handleClearLogs}><Trash2 size={14} /> Clear All Logs</button>
           </div>
         </>)}
 

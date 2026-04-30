@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, MessageSquare, LogOut, UserPlus, Trash2, KeyRound, AlertTriangle, RefreshCw, ShieldOff, ShieldCheck, Search, Activity, Globe, Monitor, X, Eye } from 'lucide-react';
 import api from '../../services/api';
+import RefreshButton from '../../components/RefreshButton';
 
 export default function AdminDashboard() {
   const [tab, setTab] = useState('users');
@@ -155,6 +156,9 @@ export default function AdminDashboard() {
       </div>
 
       <div className="admin-main">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
+          <RefreshButton />
+        </div>
         {success && <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)', padding: '10px 14px', borderRadius: '8px', color: 'var(--success)', fontSize: '0.8rem', marginBottom: '14px' }}>✓ {success}</div>}
         {error && <div className="auth-error" style={{ marginBottom: '14px' }}>{error}</div>}
 

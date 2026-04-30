@@ -1,14 +1,18 @@
 import { MessageSquare, Briefcase, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import RefreshButton from '../components/RefreshButton';
 
 export default function AdminHub() {
   const navigate = useNavigate();
 
   return (
     <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '30px' }}>
-        <Lock size={32} color="var(--accent)" />
-        <h1 style={{ margin: 0 }}>Admin Hub</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Lock size={32} color="var(--accent)" />
+          <h1 style={{ margin: 0 }}>Admin Hub</h1>
+        </div>
+        <RefreshButton />
       </div>
       <p style={{ color: 'var(--text-muted)', marginBottom: '40px' }}>Secure management portal for all connected applications.</p>
       

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, Shield, ArrowLeft } from 'lucide-react';
 import api from '../../services/api';
+import RefreshButton from '../../components/RefreshButton';
 
 export default function AdminLogin() {
   const [username, setUsername] = useState('');
@@ -35,6 +36,9 @@ export default function AdminLogin() {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+          <RefreshButton />
+        </div>
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
           <Shield size={32} style={{ color: 'var(--accent)' }} />
         </div>
